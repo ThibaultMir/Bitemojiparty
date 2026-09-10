@@ -35,7 +35,7 @@ Le Game Master de Pool Party ou Kick Off peut aussi viser avec la souris et cliq
 | Pool Party | 30 s | Éviter les cibles et les bouées qui coulent ; sauter | Viser et tirer au lance-pierre sur les 36 bouées |
 | Zombie Escape | 60 s | Fuir, sprinter, contourner les meubles | Infecter après 2 secondes de proximité ; les infectés rejoignent la chasse |
 | Kick Off | 30 s | Esquiver ou sauter la botte, éviter l'éjection | Aligner la jambe mécanique, frapper puis se rétracter |
-| Spin Session | 30 s | Compenser la rotation et rester sur le disque | Inverser le disque et déclencher une accélération temporaire |
+| Spin Session (Disco) | 30 s | Courir gauche/droite à contre-sens sur la tranche d’une roue verticale | Inverser le disque et déclencher une accélération temporaire |
 
 Un Game Master est attribué à chaque manche. Dans une party, le maître est tiré au sort parmi les huit avatars à chaque manche ; les répétitions sont possibles. Les places restantes sont jouées par les bots. Un survivant ou un Game Master victorieux gagne 100 points ; les autres reçoivent des points de survie ou d'élimination. Les scores s'additionnent pendant la party.
 
@@ -78,3 +78,9 @@ Cette version restitue la boucle de jeu et les quatre modes de lancement. **Elle
 - [Captures de Pool Party](https://curved.de/news/snap-games-snapchat-laesst-euch-kostenlos-spiele-mit-freunden-zocken-652027)
 
 Projet indépendant, non affilié à Snap Inc.
+
+### Correction Disco — 10 septembre 2026
+
+La roue est verticale (diamètre 18, largeur 8), avec les sept joueurs sur sa tranche et une caméra de face surélevée. Maintenir gauche ou droite à contre-sens annule exactement l’entraînement de la roue ; courir dans son sens double le déplacement vers le vide. Sans commande, le joueur est emporté. Le Game Master inverse immédiatement le sens (F / Maj droite / bouton Inverser) et peut accélérer temporairement. Les bots réagissent avec un délai.
+
+Dans ce mode, seuls gauche/droite servent aux coureurs : ni saut ni déplacement en profondeur. Le joystick mobile devient directionnel pour permettre une compensation complète. La chute commence au-delà de l’arc supérieur de sécurité, puis conserve la vitesse tangentielle du joueur. Les dimensions, vitesses et seuils sont des paramètres de cette adaptation.

@@ -77,6 +77,8 @@ Le titre de lancement est **Kick Off** (S1). « Kickball » est traité ici comm
 
 ## Spin Session
 
+**Correction du 10 septembre 2026, selon la description fournie par le propriétaire du projet :** roue verticale large, personnages sur la tranche, déplacement gauche/droite opposé à la rotation pour rester en place, inversion rapide nécessaire quand le Game Master change le sens. La mécanique horizontale décrite dans le tableau historique ci-dessous est remplacée. La rotation et le déplacement utilisent désormais la même vitesse angulaire ; une mauvaise direction double la dérive. Le saut est désactivé pour les coureurs de ce mode. Cette correction repose sur la spécification utilisateur, pas sur une nouvelle vérification de la vidéo.
+
 **Principe confirmé :** maintenir son équilibre sur une roue qui tourne (S4). Le rôle asymétrique du Game Master est confirmé à l'échelle du jeu (S2), sans détail de ses boutons pour cette épreuve.
 
 | Point | Avant | Maintenant | Statut |
@@ -121,7 +123,7 @@ Les autres noms de jeux apparaissant dans des articles ou des stickers ne sont p
 
 Les tests de simulation vérifient les collisions, la conversion progressive, sa propagation, l'absence d'infection à travers un mur, la trajectoire du lance-pierre, la frappe mécanique, le saut, la rotation, les tirages de party, la connectivité du manoir et la terminaison des manches.
 
-Sur cinq graines déterministes avec uniquement des bots, les survivants de Pool Party sont 5/3/6/4/6, ceux de Kick Off 0/2/1/2/0, ceux de Spin Session 6/6/6/7/6. Les zombies gagnent les cinq manches, entre 35,3 et 53,5 secondes. Ce petit échantillon révèle une difficulté différente selon les épreuves ; il ne constitue pas une validation d'équilibrage humain.
+Avant la correction Disco du 10 septembre (résultats Spin Session désormais obsolètes), sur cinq graines déterministes avec uniquement des bots, les survivants de Pool Party sont 5/3/6/4/6, ceux de Kick Off 0/2/1/2/0, ceux de Spin Session 6/6/6/7/6. Les zombies gagnent les cinq manches, entre 35,3 et 53,5 secondes. Ce petit échantillon révèle une difficulté différente selon les épreuves ; il ne constitue pas une validation d'équilibrage humain.
 
 Le module Three.js tronqué dans le précédent transfert GitHub a également été restauré. L'intégrité des fichiers envoyés est contrôlée par leurs empreintes Git.
 

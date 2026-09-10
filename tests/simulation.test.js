@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Match, GAMES, MANSION, BASE_AREA, makeMansion, blocked, moveWithWalls, Navigation, seededRandom, INFECTION_SECONDS, partySchedule, poolShotPosition, kickPose} from '../dist/simulation.js';
+import {Match, SPIN, GAMES, MANSION, BASE_AREA, makeMansion, blocked, moveWithWalls, Navigation, seededRandom, INFECTION_SECONDS, partySchedule, poolShotPosition, kickPose} from '../dist/simulation.js';
 
 test('the mansion covers five times the reference area and every spawn is connected',()=>{
  assert.equal(MANSION.area/BASE_AREA,5);
@@ -61,8 +61,54 @@ test('mechanical kick hits on extension, not on warning or retraction; jumping a
  const n=prepare();for(let i=0;i<90;i++){n.players[0].jump=2;n.players[0].jumpV=0;n.step(1/60);}assert.equal(n.hazards[0].hit0,undefined);
  assert.equal(kickPose({age:1.4,delay:.85}).striking,false);assert.equal(kickPose({age:2,delay:.85}).z,-11);
 });
-test('spin reversal eases through inertia and the wheel carries grounded players',()=>{
- const m=new Match({game:'spin',master:7,humans:8});const p=m.players[0];p.x=4;p.z=0;const before=m.angle;
- m.step(1/60);assert.ok(p.z>0&&m.angle>before);const speed=m.spinSpeed;m.direction=-1;m.step(1/60);assert.ok(m.spinSpeed<speed&&m.spinSpeed>0);
- for(let i=0;i<90;i++)m.step(1/60);assert.ok(m.spinSpeed<0);assert.equal(m.events.some(e=>e.type==='bump'),false);
+const spinInputs=(m,x,masterInput={})=>Object.fromEntries(m.players.map(p=>[p.id,p.id===m.master?masterInput:{x,z:0}]));
+const advance=(m,seconds,inputs)=>{for(let i=0;i<Math.round(seconds*60);i++)m.step(1/60,inputs);};
+
+test('spin spawns seven runners on the wide vertical rim with a separate master',()=>{
+ const m=new Match({game:'spin',master:0,humans:8});
+ const runners=m.players.filter(p=>p.id!==m.master);
+ assert.equal(new Set(runners.map(p=>p.z)).size,7);
+ for(const p of runners){assert.ok(Math.abs(Math.hypot(p.x,p.y-SPIN.centerY)-SPIN.radius)<1e-10);assert.ok(Math.abs(p.z)<SPIN.width/2);}
+ assert.ok(Math.abs(m.players[0].z)>SPIN.width/2);
+});
+test('opposing movement holds world position in either direction, even during a boost',()=>{
+ for(const direction of [-1,1]){
+  const m=new Match({game:'spin',master:7,humans:8});m.direction=direction;
+  const before=m.players.slice(0,7).map(p=>({x:p.x,y:p.y,z:p.z}));
+  advance(m,3,spinInputs(m,-direction,{action:true}));
+  assert.ok(Math.sign(m.angle)===direction);
+  m.players.slice(0,7).forEach((p,i)=>{assert.ok(p.alive);assert.deepEqual({x:p.x,y:p.y,z:p.z},before[i]);});
+ }
+});
+test('idle runners are carried along the rim and same-direction running doubles drift',()=>{
+ const idle=new Match({game:'spin',humans:8}),wrong=new Match({game:'spin',humans:8});
+ const start=idle.players[0].rimAngle;
+ advance(idle,.5,spinInputs(idle,0));advance(wrong,.5,spinInputs(wrong,1));
+ assert.ok(Math.abs((wrong.players[0].rimAngle-start)-2*(idle.players[0].rimAngle-start))<1e-10);
+ advance(wrong,1.5,spinInputs(wrong,1));assert.equal(wrong.players[0].alive,false);
+ advance(idle,3,spinInputs(idle,0));assert.equal(idle.players[0].alive,false);
+});
+test('master reversal affects all runners immediately; quick correction saves, delay kills',()=>{
+ for(const master of [0,7]){
+  const m=new Match({game:'spin',master,humans:8});const runner=m.players[master===0?1:0];
+  advance(m,.5,spinInputs(m,-1));
+  const start=runner.rimAngle;
+  m.step(1/60,spinInputs(m,-1,{reverse:true}));
+  assert.equal(m.direction,-1);assert.ok(runner.rimAngle<start);
+  advance(m,.2,spinInputs(m,-1,{reverse:true}));assert.equal(m.direction,-1,'held reverse must not toggle repeatedly');
+  const rescued=runner.rimAngle;
+  advance(m,2,spinInputs(m,1));assert.ok(runner.alive);assert.equal(runner.rimAngle,rescued);
+  m.step(1/60,spinInputs(m,1,{reverse:true}));assert.equal(m.direction,1);
+  advance(m,3,spinInputs(m,1));assert.equal(runner.alive,false);
+  assert.equal(m.events.filter(e=>e.type==='reverse').length,2);
+ }
+});
+test('spin touch input is directional, ignores depth and jumping, and bots must react',()=>{
+ const m=new Match({game:'spin',humans:8});const p=m.players[0],before={x:p.x,y:p.y,z:p.z};
+ advance(m,1,{...spinInputs(m,-1),0:{x:-.3,z:1,action:true}});
+ assert.deepEqual({x:p.x,y:p.y,z:p.z},before);assert.equal(p.jump,0);assert.equal(p.jumpV,0);
+ const bots=new Match({game:'spin',master:0,humans:1,random:seededRandom(4)});const b=bots.players[1];b.botAt=.5;
+ bots.step(1/60,{0:{reverse:true}});assert.equal(b.brain.x,-1);
+ const angle=b.rimAngle;advance(bots,.3,{});assert.ok(b.rimAngle<angle);
+ advance(bots,.3,{});assert.equal(b.brain.x,1);assert.ok(b.alive);
 });

@@ -1,5 +1,5 @@
 import * as T from './vendor/three.module.js';
-import {COLORS, MANSION, makeMansion, distance, lineClear, wrap, poolShotPosition, kickPose} from './simulation.js';
+import {COLORS, MANSION, SPIN, makeMansion, distance, lineClear, wrap, poolShotPosition, kickPose} from './simulation.js';
 const matCache=new Map();
 const sight={center:{value:new T.Vector2()},radius:{value:1000},enabled:{value:0},fog:{value:new T.Color(.055,.068,.13)}};
 function material(color,extra={}) {
@@ -60,7 +60,8 @@ export class Avatar {
  }
  setZombie(zombie){if(this.infected===zombie)return;this.infected=zombie;for(const m of this.skinMeshes)m.material=material(zombie?'#96d765':skins[this.skin%skins.length]);}
  update(p,time,lobby=false,dance=0) {
-  this.root.position.set(p.x,Math.max(-5,p.jump||0),p.z);this.root.visible=p.alive!==false||(p.jump||0)>-5;
+  const fallLimit=p.rimAngle===undefined?-5:-20;
+  this.root.position.set(p.x,(p.y||0)+Math.max(fallLimit,p.jump||0),p.z);this.root.visible=p.alive!==false||(p.jump||0)>fallLimit;
   this.infectionBar.visible=!p.infected&&(p.infection||0)>0;this.infectionFill.scale.x=1.45*(p.infection||0);this.infectionFill.position.x=-.725+.725*(p.infection||0);
   this.setZombie(!!p.infected);this.body.rotation.y+=wrap((p.angle||0)-this.body.rotation.y)*.18;
   const moving=p.walk||0;let sway=moving?Math.sin(moving):Math.sin(time*2+p.id)*.12;
@@ -70,7 +71,8 @@ export class Avatar {
   this.head.rotation.z=Math.sin(time*2+p.id)*.04;
   if(this.infected){this.arms.forEach(a=>a.rotation.x=-1.25);this.body.rotation.z=Math.sin(time*4+p.id)*.09;}
   if(dance||p.emote){this.body.position.y=Math.abs(Math.sin(time*6))*.22;this.body.rotation.z=Math.sin(time*6)*.15;this.arms.forEach((a,i)=>{a.rotation.z=(i?-1:1)*(1.7+Math.sin(time*6+i)*.45);});this.head.rotation.z=Math.sin(time*6)*.15;if(dance===2)this.body.rotation.y=time*3;if(dance===3){const beat=Math.floor(time*4);this.body.rotation.y=(beat%4)*Math.PI/2;this.body.rotation.z=0;this.arms.forEach((a,i)=>{a.rotation.z=(i?-1:1)*(beat%2?1.57:.5);a.rotation.x=beat%2?0:-1.57;});this.head.rotation.z=beat%2?.22:-.22;}}
-  this.shadow.visible=(p.jump||0)<.5;this.crown.visible=!!p.master&&!this.infected;
+  this.shadow.visible=p.alive!==false&&(p.jump||0)<.5;this.crown.visible=!!p.master&&!this.infected;
+  this.shadow.rotation.y=p.rimAngle||0;this.ring.rotation.y=p.rimAngle||0;
  }
 }
 function tiles(parent,cols,rows,size,colors,y=0) {
@@ -156,12 +158,26 @@ export class World {
    this.bootHome=this.boot(g,0,-11);this.bootHome.scale.setScalar(.85);
   }
   if(game==='spin') {
-   cyl(g,'#7265a6',0,-1,0,11,1.4);cyl(g,'#ffdb88',0,-.15,0,9.1,.35);this.spinGroup=group(g);
-   for(let i=0;i<8;i++){const geo=new T.CylinderGeometry(8.85,8.85,.18,8,1,false,i*Math.PI/4,Math.PI/4);mesh(this.spinGroup,geo,i%2?'#ba85da':'#9777ce',0,.03,0);}
-   torus(g,'#f9edb2',0,.2,0,8.9,.1);cyl(g,'#694faf',0,.4,0,1.3,.9);cyl(g,'#ffcd69',0,.9,0,1.05,.25);
-   // The documented challenge is balance on the rotating wheel; no unverified sweeper.
-   for(let i=0;i<8;i++){const a=i*Math.PI/4;const marker=box(this.spinGroup,'#ffe694',Math.cos(a)*7,.18,Math.sin(a)*7,.45,.04,1.4);marker.rotation.y=-a;}
-   for(const x of [-12,12])speaker(g,x,0);cyl(g,'#6c549c',0,-.3,-12,1.6,.6);box(g,'#a89ccc',0,.5,-12,1.8,1,1);
+   this.spinGroup=group(g,0,SPIN.centerY,0);
+   // Cylinder axis is Z: a vertical disc with a broad, continuous running tread.
+   const wheel=mesh(this.spinGroup,new T.CylinderGeometry(SPIN.radius,SPIN.radius,SPIN.width,96),'#9777ce',0,0,0);wheel.rotation.x=Math.PI/2;
+   for(const z of [-SPIN.width/2,SPIN.width/2]) {
+    torus(this.spinGroup,'#ffe694',0,0,z,SPIN.radius,.10,0);
+    torus(this.spinGroup,'#ba85da',0,0,z,6.9,.17,0);
+    const hub=cyl(this.spinGroup,'#ffcd69',0,0,z,1.1,.24);hub.rotation.x=Math.PI/2;
+    for(let i=0;i<12;i++) {
+     const a=i*Math.PI/6;
+     const spoke=box(this.spinGroup,i%2?'#ffe694':'#d4a7ff',Math.sin(a)*4.9,Math.cos(a)*4.9,z,.16,6.4,.08);spoke.rotation.z=-a;
+    }
+   }
+   for(let i=0;i<32;i++) {
+    const a=i*Math.PI/16;
+    const tread=box(this.spinGroup,i%4===0?'#ffe694':'#ba85da',Math.sin(a)*(SPIN.radius+.015),Math.cos(a)*(SPIN.radius+.015),0,.17,.04,SPIN.width-.16);tread.rotation.z=-a;
+   }
+   // Separate suspended deck for the master; there is empty space under the wheel.
+   box(g,'#6c549c',0,3.7,-6,5,.6,2.6);box(g,'#a89ccc',0,4.5,-6.8,2.6,1,1);
+   for(const x of [-1.8,1.8]){const s=speaker(g,x,-6);s.position.y=4;s.scale.setScalar(.6);}
+   this.spinSign=textSprite('', '#fff593',.9);this.spinSign.position.set(0,-6,4.3);g.add(this.spinSign);
   }
   roster.forEach((r,i)=>this.avatars.push(new Avatar(this.characters,i,r.color,r.name,i===0?skin:i%6,i===0?hair:i%4)));
   this.cursor=torus(this.dynamic,'#fff5a6',0,.5,0,.8,.08);this.cursor.visible=false;
@@ -170,9 +186,10 @@ export class World {
  boot(parent,x,z) {const g=group(parent,x,0,z);pill(g,'#f6d982',0,2.4,0,1.8,3.4,1.7);orb(g,'#ee9d72',0,.9,.6,1.5,.9,2.2);box(g,'#79466a',0,.26,.6,2.8,.45,3.8);for(let i=0;i<3;i++)box(g,'#fff7d3',0,1.64,.3+i*.4,1.35,.10,.18);return g;}
  pointer(clientX,clientY){const n=new T.Vector2(clientX/this.width*2-1,-clientY/this.height*2+1);const ray=new T.Raycaster();ray.setFromCamera(n,this.camera);const out=new T.Vector3();return ray.ray.intersectPlane(new T.Plane(new T.Vector3(0,1,0),0),out)?{x:out.x,z:out.z}:null;}
  cameraAt(center,width,height,game=this.game) {
-  const aspect=width/height;const size=game==='zombie'?21:game==='lobby'?(aspect<.8?34:26):(aspect<.8?37:28);
+  const aspect=width/height;const size=game==='spin'?Math.max(34,25/aspect):game==='zombie'?21:game==='lobby'?(aspect<.8?34:26):(aspect<.8?37:28);
   this.camera.left=-size*aspect/2;this.camera.right=size*aspect/2;this.camera.top=size/2;this.camera.bottom=-size/2;this.camera.updateProjectionMatrix();
-  this.camera.position.set(center.x,24,center.z+22);this.camera.lookAt(center.x,0,center.z);
+  if(game==='spin'){this.camera.position.set(0,12,34);this.camera.lookAt(0,-4,0);}
+  else{this.camera.position.set(center.x,24,center.z+22);this.camera.lookAt(center.x,0,center.z);}
  }
  update(match,roster,time,{dance=0,two=false,lobby=false}={}) {
   const ps=match?match.players:roster;
@@ -181,7 +198,14 @@ export class World {
   this.ghosts.forEach((g,i)=>{g.position.y=2.4+Math.sin(time*1.8+i)*.3;g.rotation.z=Math.sin(time+i)*.1;});
   if(match) {
    if(this.game==='pool')this.tileMeshes.forEach((g,i)=>{const t=match.tiles[i];g.position.y=t.alive?Math.sin(time*2+i)*.025:Math.max(-3,g.position.y-.09);g.visible=g.position.y>-2.8;g.rotation.z=t.alive?0:Math.sin(time*6+i)*.15;});
-   if(this.game==='spin'&&this.spinGroup)this.spinGroup.rotation.y=-match.angle;
+   if(this.game==='spin'&&this.spinGroup){
+    this.spinGroup.rotation.z=-match.angle;
+    if(this.spinSign.userData.direction!==match.direction){
+     this.spinSign.material.map.dispose();this.spinSign.material.dispose();this.root.remove(this.spinSign);
+     this.spinSign=textSprite(match.direction>0?'ROTATION →':'← ROTATION','#fff593',.9);
+     this.spinSign.position.set(0,-6,4.3);this.spinSign.userData.direction=match.direction;this.root.add(this.spinSign);
+    }
+   }
    this.cursor.visible=match.master<match.humans&&this.game!=='zombie'&&this.game!=='spin';this.cursor.position.set(match.target.x,.6,this.game==='kick'?0:match.target.z);this.cursor.scale.setScalar(1+Math.sin(time*8)*.1);
    if(this.game==='kick') {this.bootHome.position.x=match.target.x;this.bootHome.visible=!match.hazards.some(h=>h.type==='boot');}
    const alive=new Set(match.hazards);
