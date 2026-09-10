@@ -1,11 +1,18 @@
 // Gameplay is independent of rendering. Coordinates are world-space x/z.
 export const BASE_AREA = 20 * 20;
 export const MANSION = { width: 40, depth: 50, vision: 11, area: 2000 };
+// Exact timing is an adaptation of Snap’s description: stay close for a few seconds.
+export const INFECTION_SECONDS = 2;
+export function partySchedule(random=Math.random) {
+ const games=Object.keys(GAMES);
+ for(let i=games.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[games[i],games[j]]=[games[j],games[i]];}
+ return {games,masters:games.map(()=>Math.floor(random()*8))};
+}
 export const GAMES = {
- pool: {name:'Pool Party', icon:'🌊', color:'#51d5ed', duration:40, subtitle:'Garde les pieds au sec.', runner:'Évite les cibles rouges et les trous. Saute entre les bouées !', master:'Déplace la cible et tire pour couler les bouées.', action:'Sauter', masterAction:'Tirer'},
- zombie: {name:'Zombie Escape', icon:'👻', color:'#b1ee75', duration:60, subtitle:'Bienvenue au manoir des trouillards.', runner:'Fuis les zombies jusqu’à la fin. Le sprint peut te sauver !', master:'Reste près des humains pour les infecter. Ils rejoignent ton équipe.', action:'Sprinter', masterAction:'Sprinter'},
- kick: {name:'Kick Off', icon:'👟', color:'#ffa96c', duration:40, subtitle:'Attention à la pointure 300.', runner:'Évite la ligne rouge. Saute par-dessus la botte au bon moment.', master:'Vise une colonne et envoie la botte géante.', action:'Sauter', masterAction:'Shooter'},
- spin: {name:'Spin Session', icon:'🌀', color:'#d4a7ff', duration:40, subtitle:'Ça va tourner au vinaigre.', runner:'Reste sur le disque, compense la rotation et saute la barre.', master:'Inverse la rotation ou accélère pour déstabiliser les joueurs.', action:'Sauter', masterAction:'Accélérer'}
+ pool: {name:'Pool Party', icon:'🌊', color:'#51d5ed', duration:30, subtitle:'Garde les pieds au sec.', runner:'Évite les cibles rouges et les trous. Saute entre les bouées !', master:'Déplace la cible et tire pour couler les bouées.', action:'Sauter', masterAction:'Tirer'},
+ zombie: {name:'Zombie Escape', icon:'👻', color:'#b1ee75', duration:60, subtitle:'Bienvenue au manoir des trouillards.', runner:'Fuis les zombies jusqu’à la fin. Le sprint peut te sauver !', master:'Reste 2 secondes près d’un humain pour l’infecter. Il rejoint ton équipe.', action:'Sprinter', masterAction:'Sprinter'},
+ kick: {name:'Kick Off', icon:'👟', color:'#ffa96c', duration:30, subtitle:'Attention à la pointure 300.', runner:'Évite la zone rouge. Saute la botte et reste sur le terrain.', master:'Aligne la jambe mécanique, puis déclenche un coup de pied.', action:'Sauter', masterAction:'Shooter'},
+ spin: {name:'Spin Session', icon:'🌀', color:'#d4a7ff', duration:30, subtitle:'Ça va tourner au vinaigre.', runner:'Reste sur le disque : compense la rotation et évite les bords.', master:'Inverse la rotation ou accélère pour déstabiliser les joueurs.', action:'Sauter', masterAction:'Accélérer'}
 };
 export const COLORS = ['#ffca48','#55d6cf','#f78bc1','#8c94ff','#fd926d','#a0dc79','#c690eb','#f56f80'];
 export const NAMES = ['Toi','Milo','Lola','Sacha','Zoé','Noé','Jade','Gus'];
@@ -13,6 +20,16 @@ export const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
 export const distance = (a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 export const wrap = a=>Math.atan2(Math.sin(a),Math.cos(a));
 export function seededRandom(seed=1) { return ()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296;}; }
+export function poolShotPosition(h) {
+ const u=clamp(h.age/h.delay,0,1);
+ return {x:h.x*u,y:2.4*(1-u)+.35*u+20*u*(1-u),z:-11.8+(h.z+11.8)*u};
+}
+// A mounted leg winds up, extends, then retracts; it is not a free-flying projectile.
+export function kickPose(h) {
+ const t=h.age-h.delay;
+ const extension=t<0?0:t<.48?t/.48:t<.95?1-(t-.48)/.47:0;
+ return {z:-11+20*clamp(extension,0,1),striking:t>=0&&t<.48};
+}
 export function makeMansion() {
  const items=[];
  const add=(kind,x,z,w,d,h=1.8)=>items.push({kind,x,z,w,d,h});
@@ -126,23 +143,27 @@ export class Match {
     }else p.brain={x:p.x,z:p.z};
    } else if(this.game==='kick') {
     const threat=this.hazards.find(h=>h.age<2.9&&Math.abs(p.x-h.x)<2);
-    p.brain=threat?{x:clamp(threat.x+(p.x>threat.x?3.5:-3.5),-8,8),z:p.z}:{x:p.x*.8+(r()-.5),z:p.z*.8};
-    if(threat&&threat.z>p.z-3&&threat.z<p.z+1&&r()<.8)this.action(p);
+    p.brain=threat&&r()>.22?{x:clamp(threat.x+(p.x>threat.x?3.5:-3.5),-8,8),z:p.z}:{x:p.x*.8+(r()-.5),z:p.z*.8};
+    if(threat&&threat.age>threat.delay-.2&&threat.age<threat.delay+.2&&r()<.45)this.action(p);
    } else {
     const orbit=3.7+(p.id%4)*.65;
     p.brain={x:Math.cos(p.id*1.3+this.time*.08)*orbit,z:Math.sin(p.id*1.3+this.time*.08)*orbit};
-    const d=Math.abs(wrap(Math.atan2(p.z,p.x)-this.angle));if(Math.min(d,Math.PI-d)<.4&&r()<.9)this.action(p);
+    if(Math.hypot(p.x,p.z)>7.5&&r()<.7)this.action(p);
    }
   }
   let target=p.brain;
-  if(this.game==='zombie'){while(p.path[0]&&distance(p,p.path[0])<.4)p.path.shift();target=p.path[0]||p;}
+  if(this.game==='zombie'){
+   while(p.path[0]&&distance(p,p.path[0])<.4)p.path.shift();target=p.path[0]||p;
+   if(p.infected){const close=this.players.filter(q=>!q.infected&&distance(p,q)<5&&lineClear(p,q,this.obstacles,.6)).sort((a,b)=>distance(a,p)-distance(b,p))[0];if(close)target=close;}
+  }
   let dx=target.x-p.x,dz=target.z-p.z;const len=Math.hypot(dx,dz);return len>.15?{x:dx/len,z:dz/len}:{x:0,z:0};
  }
  step(delta,inputs={}) {
   if(this.done)return;
   const dt=Math.min(delta,.04);this.time+=dt;this.boost=Math.max(0,this.boost-dt);
-  this.spinSpeed=(.72+this.time*.028+(this.boost?1.3:0))*this.direction;
-  if(this.game==='spin')this.angle+=this.spinSpeed*dt;
+  const wantedSpeed=(.72+this.time*.028+(this.boost?1.3:0))*this.direction;
+  this.spinSpeed+=(wantedSpeed-this.spinSpeed)*(1-Math.exp(-4*dt));
+  if(this.game==='spin')this.angle+=this.spinSpeed*.55*dt;
   for(const p of this.players) {
    p.cooldown=Math.max(0,p.cooldown-dt);p.dash=Math.max(0,p.dash-dt);p.emote=Math.max(0,p.emote-dt);
    if(!p.alive){p.jumpV-=16*dt;p.jump+=p.jumpV*dt;p.x+=p.vx*dt;p.z+=p.vz*dt;continue;}
@@ -159,7 +180,7 @@ export class Match {
     continue;
    }
    let dx=input.x||0,dz=input.z||0;const len=Math.hypot(dx,dz);if(len>1){dx/=len;dz/=len;}
-   const speed=(this.game==='zombie'?(p.infected?4.05:4.6):5.6)*(p.dash>0?1.9:1);
+   const speed=(this.game==='zombie'?(p.infected?4.9:4.6):5.6)*(p.dash>0?1.9:1);
    if(p.jump>0||p.jumpV>0){p.jumpV-=19*dt;p.jump+=p.jumpV*dt;if(p.jump<=0){p.jump=0;p.jumpV=0;}}
    let vx=dx*speed+p.vx,vz=dz*speed+p.vz;p.vx*=Math.exp(-4.2*dt);p.vz*=Math.exp(-4.2*dt);
    if(this.game==='spin'&&p.jump<.4) {const radius=Math.hypot(p.x,p.z);vx+=-p.z*this.spinSpeed*.55+p.x*(.10+radius*.027)*Math.abs(this.spinSpeed);vz+=p.x*this.spinSpeed*.55+p.z*(.10+radius*.027)*Math.abs(this.spinSpeed);}
@@ -174,10 +195,7 @@ export class Match {
     const radius=Math.hypot(p.x,p.z);
     if(radius<1.65){p.x=p.x/(radius||1)*1.65;p.z=p.z/(radius||1)*1.65;if(!radius)p.x=1.65;}
     if(radius>8.9)this.eliminate(p);
-    const d=Math.abs(wrap(Math.atan2(p.z,p.x)-this.angle));
-    if(Math.min(d,Math.PI-d)<.12&&Math.hypot(p.x,p.z)>1.6&&p.jump<.65&&(p.lastHit||0)<this.time) {
-     p.vx=-Math.sin(this.angle)*this.direction*17+p.x*1.1;p.vz=Math.cos(this.angle)*this.direction*17+p.z*1.1;p.lastHit=this.time+.9;this.event('bump',p);
-    }
+
    }
   }
   if(this.game!=='zombie') {
@@ -187,7 +205,7 @@ export class Match {
   if(this.game==='zombie') {
    for(const p of this.players.filter(p=>!p.infected)) {
     const z=this.players.find(q=>q.infected&&distance(q,p)<1.25&&lineClear(q,p,this.obstacles,.1));
-    p.infection=z?Math.min(1,p.infection+dt/0.52):Math.max(0,p.infection-dt*.85);
+    p.infection=z?Math.min(1,p.infection+dt/INFECTION_SECONDS):Math.max(0,p.infection-dt*.85);
     if(p.infection>=1){p.infected=true;p.outAt=this.time;p.infection=0;p.dash=0;p.cooldown=1;this.event('infect',p,{by:z.id});}
    }
   }
@@ -197,12 +215,12 @@ export class Match {
     h.hit=true;this.tiles[h.tile].alive=false;this.event('splash',null,{x:h.x,z:h.z});
     for(const p of this.players)if(p.alive&&p.id!==this.master&&distance(p,h)<2.3&&p.jump<.6){p.vx=(p.x-h.x||.3)*5;p.vz=(p.z-h.z||.3)*5;}
    }
-   if(h.type==='boot'&&h.age>=h.delay) {
-    const old=h.z;h.z=-11+(h.age-h.delay)*17;
-    for(const p of this.players)if(p.alive&&p.id!==this.master&&Math.abs(p.x-h.x)<1.8&&p.z>=old-1.5&&p.z<=h.z+1.5&&p.jump<.8&&!h['hit'+p.id]){h['hit'+p.id]=true;p.vz=24;p.vx=(p.x-h.x)*4;this.event('bump',p);}
+   if(h.type==='boot') {
+    const previous=kickPose({...h,age:h.age-dt}),pose=kickPose(h);h.z=pose.z;
+    if(pose.striking||previous.striking) for(const p of this.players)if(p.alive&&p.id!==this.master&&Math.abs(p.x-h.x)<1.8&&p.z>=previous.z-1.5&&p.z<=Math.max(pose.z,previous.z)+1.5&&p.jump<.8&&!h['hit'+p.id]){h['hit'+p.id]=true;p.vz=65;p.vx=(p.x-h.x)*4;this.event('bump',p);}
    }
   }
-  this.hazards=this.hazards.filter(h=>h.age<3.1);
+  this.hazards=this.hazards.filter(h=>h.age<(h.type==='boot'?h.delay+.96:3.1));
   const survivors=this.players.filter(p=>p.id!==this.master&&p.alive&&(this.game!=='zombie'||!p.infected));
   if(!survivors.length||this.time>=this.config.duration){this.time=Math.min(this.time,this.config.duration);this.done=true;this.masterWon=!survivors.length;this.event('finish');}
  }

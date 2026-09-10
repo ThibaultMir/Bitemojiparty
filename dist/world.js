@@ -1,5 +1,5 @@
 import * as T from './vendor/three.module.js';
-import {COLORS, MANSION, makeMansion, distance, lineClear, wrap} from './simulation.js';
+import {COLORS, MANSION, makeMansion, distance, lineClear, wrap, poolShotPosition, kickPose} from './simulation.js';
 const matCache=new Map();
 const sight={center:{value:new T.Vector2()},radius:{value:1000},enabled:{value:0},fog:{value:new T.Color(.055,.068,.13)}};
 function material(color,extra={}) {
@@ -53,6 +53,7 @@ export class Avatar {
    const leg=group(this.body,dir*.22,.65,0);this.legs.push(leg);pill(leg,'#34344c',0,-.21,0,.28,.47,.3);orb(leg,'#fff9e9',0,-.48,.09,.22,.145,.31);
   }
   this.tag=textSprite(name,id===0?'#fff28c':'#ffffff',.53);this.tag.position.set(0,3.03,0);this.root.add(this.tag);
+  this.infectionBar=group(this.root,0,3.55,0);box(this.infectionBar,'#332d54',0,0,0,1.55,.16,.12);this.infectionFill=box(this.infectionBar,'#b1ee75',0,0,.07,1.45,.1,.06);this.infectionBar.visible=false;
   this.ring=torus(this.root,id===0?'#fff57b':'#ffffff',0,.035,0,.66,.035);this.ring.visible=id===0;
   this.crown=group(this.head,0,1.0,0);cyl(this.crown,'#ffce43',0,0,0,.28,.16);for(let i=0;i<5;i++){const a=i/5*Math.PI*2;orb(this.crown,'#fff291',Math.cos(a)*.27,.18,Math.sin(a)*.27,.055);box(this.crown,'#ffce43',Math.cos(a)*.24,.08,Math.sin(a)*.24,.065,.24,.065);}this.crown.visible=false;
   this.skinMeshes[0].castShadow=true;this.shirt.castShadow=true;this.infected=false;this.dance=0;
@@ -60,6 +61,7 @@ export class Avatar {
  setZombie(zombie){if(this.infected===zombie)return;this.infected=zombie;for(const m of this.skinMeshes)m.material=material(zombie?'#96d765':skins[this.skin%skins.length]);}
  update(p,time,lobby=false,dance=0) {
   this.root.position.set(p.x,Math.max(-5,p.jump||0),p.z);this.root.visible=p.alive!==false||(p.jump||0)>-5;
+  this.infectionBar.visible=!p.infected&&(p.infection||0)>0;this.infectionFill.scale.x=1.45*(p.infection||0);this.infectionFill.position.x=-.725+.725*(p.infection||0);
   this.setZombie(!!p.infected);this.body.rotation.y+=wrap((p.angle||0)-this.body.rotation.y)*.18;
   const moving=p.walk||0;let sway=moving?Math.sin(moving):Math.sin(time*2+p.id)*.12;
   this.body.position.y=moving?Math.abs(Math.sin(moving))*.085:Math.sin(time*2+p.id)*.025;
@@ -157,7 +159,8 @@ export class World {
    cyl(g,'#7265a6',0,-1,0,11,1.4);cyl(g,'#ffdb88',0,-.15,0,9.1,.35);this.spinGroup=group(g);
    for(let i=0;i<8;i++){const geo=new T.CylinderGeometry(8.85,8.85,.18,8,1,false,i*Math.PI/4,Math.PI/4);mesh(this.spinGroup,geo,i%2?'#ba85da':'#9777ce',0,.03,0);}
    torus(g,'#f9edb2',0,.2,0,8.9,.1);cyl(g,'#694faf',0,.4,0,1.3,.9);cyl(g,'#ffcd69',0,.9,0,1.05,.25);
-   this.bar=group(g,0,.55,0);pill(this.bar,'#ffe694',0,0,0,17,.43,.45);orb(this.bar,'#f19ac4',8.25,0,0,.45);orb(this.bar,'#f19ac4',-8.25,0,0,.45);
+   // The documented challenge is balance on the rotating wheel; no unverified sweeper.
+   for(let i=0;i<8;i++){const a=i*Math.PI/4;const marker=box(this.spinGroup,'#ffe694',Math.cos(a)*7,.18,Math.sin(a)*7,.45,.04,1.4);marker.rotation.y=-a;}
    for(const x of [-12,12])speaker(g,x,0);cyl(g,'#6c549c',0,-.3,-12,1.6,.6);box(g,'#a89ccc',0,.5,-12,1.8,1,1);
   }
   roster.forEach((r,i)=>this.avatars.push(new Avatar(this.characters,i,r.color,r.name,i===0?skin:i%6,i===0?hair:i%4)));
@@ -178,17 +181,18 @@ export class World {
   this.ghosts.forEach((g,i)=>{g.position.y=2.4+Math.sin(time*1.8+i)*.3;g.rotation.z=Math.sin(time+i)*.1;});
   if(match) {
    if(this.game==='pool')this.tileMeshes.forEach((g,i)=>{const t=match.tiles[i];g.position.y=t.alive?Math.sin(time*2+i)*.025:Math.max(-3,g.position.y-.09);g.visible=g.position.y>-2.8;g.rotation.z=t.alive?0:Math.sin(time*6+i)*.15;});
-   if(this.game==='spin'){this.bar.rotation.y=-match.angle;if(this.spinGroup)this.spinGroup.rotation.y=-match.angle*.5;}
+   if(this.game==='spin'&&this.spinGroup)this.spinGroup.rotation.y=-match.angle;
    this.cursor.visible=match.master<match.humans&&this.game!=='zombie'&&this.game!=='spin';this.cursor.position.set(match.target.x,.6,this.game==='kick'?0:match.target.z);this.cursor.scale.setScalar(1+Math.sin(time*8)*.1);
+   if(this.game==='kick') {this.bootHome.position.x=match.target.x;this.bootHome.visible=!match.hazards.some(h=>h.type==='boot');}
    const alive=new Set(match.hazards);
    for(const [h,g] of this.hazardMeshes)if(!alive.has(h)){this.dynamic.remove(g);g.traverse(o=>{if(o.geometry&&!Object.values(geometries).includes(o.geometry))o.geometry.dispose();});this.hazardMeshes.delete(h);}
    for(const h of match.hazards) {
     let g=this.hazardMeshes.get(h);
-    if(!g){g=group(this.dynamic,h.x,.1,h.z);if(h.type==='splash'){const disk=cyl(g,'#ff626e',0,0,0,1.3,.07);torus(g,'#ffe7a1',0,.08,0,1.3,.07);orb(g,'#ffd564',0,8,0,.65);}
-     else {box(g,'#fb7779',0,0,0,3.2,.05,19);const boot=this.boot(g,0,-11);g.userData.boot=boot;}
+    if(!g){g=group(this.dynamic,h.x,.1,h.z);if(h.type==='splash'){const disk=cyl(g,'#ff626e',0,0,0,1.3,.07);torus(g,'#ffe7a1',0,.08,0,1.3,.07);const toy=group(g);orb(toy,'#ffd564',0,0,0,.7);orb(toy,'#fff7e8',0,.15,.55,.46,.46,.2);orb(toy,'#78d9dc',0,-.3,-.45,.5,.28,.3);g.userData.toy=toy;}
+     else {box(g,'#fb7779',0,0,0,3.2,.05,19);const boot=this.boot(g,0,-11);g.userData.boot=boot;g.userData.leg=box(g,'#98a2b6',0,1.4,-11,.7,.7,1);cyl(g,'#675676',0,.8,-11,1.2,1.6);}
      this.hazardMeshes.set(h,g);}
-    if(h.type==='splash'){g.position.set(h.x,.3,h.z);g.children[2].position.y=Math.max(.3,8*(1-h.age/h.delay));g.visible=h.age<1.35;g.children[0].visible=Math.sin(time*16)>-.4;}
-    else{g.position.set(h.x,.13,0);g.children[0].visible=h.age<h.delay;g.userData.boot.position.z=h.age<h.delay?-11:h.z;g.userData.boot.rotation.x=h.age<h.delay?-.3:0;}
+    if(h.type==='splash'){g.position.set(h.x,.3,h.z);const shot=poolShotPosition(h);g.userData.toy.position.set(shot.x-h.x,shot.y-.3,shot.z-h.z);g.userData.toy.rotation.x=h.age*7;g.userData.toy.visible=h.age<h.delay;g.visible=h.age<1.35;g.children[0].visible=Math.sin(time*16)>-.4;}
+    else{g.position.set(h.x,.13,0);g.children[0].visible=h.age<h.delay;const pose=kickPose(h);g.userData.boot.position.z=pose.z;g.userData.boot.rotation.x=h.age<h.delay?-.3*Math.sin(h.age/h.delay*Math.PI):0;g.userData.leg.position.z=(-11+pose.z)/2;g.userData.leg.scale.z=Math.max(.5,pose.z+11);}
    }
   }
   const renderView=(p,x,width,split=false)=>{

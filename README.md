@@ -10,7 +10,7 @@ Aucune installation de dépendance ni compilation n'est nécessaire. Three.js 0.
 
 - **Solo** : un joueur et sept bots.
 - **À deux** : deux joueurs sur le même clavier et six bots ; écran partagé dans le manoir.
-- **Party complète** : Pool Party → Zombie Escape → Kick Off → Spin Session, intermissions dans le lobby et classement cumulé.
+- **Party complète** : les quatre jeux dans un ordre aléatoire, intermissions dans le lobby et classement cumulé.
 - **Partie rapide** : choix du mini-jeu et du rôle joueur / Game Master.
 - **Avatar** : pseudo, huit couleurs de vêtements, six teints, quatre coiffures.
 - **Lobby** : déplacements, danses, boutique de danses et photo PNG téléchargeable.
@@ -32,12 +32,12 @@ Le Game Master de Pool Party ou Kick Off peut aussi viser avec la souris et cliq
 
 | Mini-jeu | Durée maximale | Survivants | Game Master |
 | --- | --- | --- | --- |
-| Pool Party | 40 s | Éviter les cibles et les bouées qui coulent ; sauter | Viser et tirer au lance-pierre sur les 36 bouées |
-| Zombie Escape | 60 s | Fuir, sprinter, contourner les meubles | Infecter par contact soutenu ; les infectés rejoignent la chasse |
-| Kick Off | 40 s | Esquiver ou sauter la botte, éviter l'éjection | Viser une colonne et déclencher la botte géante |
-| Spin Session | 40 s | Compenser la rotation, sauter la barre, rester sur le disque | Inverser le disque et déclencher une accélération temporaire |
+| Pool Party | 30 s | Éviter les cibles et les bouées qui coulent ; sauter | Viser et tirer au lance-pierre sur les 36 bouées |
+| Zombie Escape | 60 s | Fuir, sprinter, contourner les meubles | Infecter après 2 secondes de proximité ; les infectés rejoignent la chasse |
+| Kick Off | 30 s | Esquiver ou sauter la botte, éviter l'éjection | Aligner la jambe mécanique, frapper puis se rétracter |
+| Spin Session | 30 s | Compenser la rotation et rester sur le disque | Inverser le disque et déclencher une accélération temporaire |
 
-Un Game Master est attribué à chaque manche. Dans une party, les quatre rôles sont distribués sans répétition, en incluant le ou les joueurs humains. Les places restantes sont jouées par les bots. Un survivant ou un Game Master victorieux gagne 100 points ; les autres reçoivent des points de survie ou d'élimination. Les scores s'additionnent pendant la party.
+Un Game Master est attribué à chaque manche. Dans une party, le maître est tiré au sort parmi les huit avatars à chaque manche ; les répétitions sont possibles. Les places restantes sont jouées par les bots. Un survivant ou un Game Master victorieux gagne 100 points ; les autres reçoivent des points de survie ou d'élimination. Les scores s'additionnent pendant la party.
 
 ## Manoir demandé
 
@@ -64,9 +64,13 @@ Exécuter `npm test` (Node.js, aucune dépendance de test supplémentaire). Les 
 
 Les sources JavaScript et les références aux fichiers locaux ont également été vérifiées. Aucune validation visuelle automatisée dans un navigateur n'a été exécutée pendant cette livraison. Les performances et l'ergonomie sont à confirmer sur les appareils cibles.
 
+## Recherche et corrections
+
+Voir [le dossier par mini-jeu](docs/minigames-research.md) pour les sources, images, vidéos, différences implémentées et incertitudes. Cette passe remplace la chute verticale de Pool Party par un tir depuis le lance-pierre, la botte volante par une jambe mécanique, allonge l’infection avec une jauge et retire la barre de Spin Session non étayée. Le tirage du Game Master devient aléatoire. Les modes « speed / haut / bas » de Kick Off restent non confirmés.
+
 ## Périmètre et références
 
-Cette version restitue la boucle de jeu et les quatre modes de lancement. **Elle n'implémente pas de parties en ligne**, de chat vocal, d'authentification Snapchat ou d'import Bitmoji. Le multijoueur disponible est local sur le même clavier. Les durées, règles fines, carte agrandie et équilibrage sont des adaptations, et non les paramètres internes exacts du jeu de 2019.
+Cette version restitue la boucle de jeu et les quatre modes de lancement. **Elle n'implémente pas de parties en ligne**, de chat vocal, d'authentification Snapchat ou d'import Bitmoji. Le multijoueur disponible est local sur le même clavier. Le rythme de 30 secondes et l’infection progressive sont inspirés de l’interview de Snap ; les valeurs fines, animations, carte agrandie et équilibrage restent des adaptations.
 
 - [Snap — annonce officielle et quatre mini-jeux](https://newsroom.snap.com/introducing-snap-games?lang=fr-FR)
 - [Layton Hawkes — structure asymétrique, lobby et intermission](https://www.laytonhawkes.com/bitmoji-party)
