@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Match, SPIN, GAMES, MANSION, BASE_AREA, makeMansion, blocked, moveWithWalls, Navigation, seededRandom, INFECTION_SECONDS, partySchedule, poolShotPosition, kickPose} from '../dist/simulation.js';
+import {Match, SPIN, POOL, POOL_LAYOUT, makePool, poolAim, poolHit, poolOutline, GAMES, MANSION, BASE_AREA, makeMansion, blocked, moveWithWalls, Navigation, seededRandom, INFECTION_SECONDS, partySchedule, poolShotPosition, kickPose} from '../dist/simulation.js';
 
 test('the mansion covers five times the reference area and every spawn is connected',()=>{
  assert.equal(MANSION.area/BASE_AREA,5);
@@ -20,7 +20,7 @@ test('infection takes sustained contact, propagates, and respects walls',()=>{
  const n=new Match({game:'zombie',master:7,humans:8});n.obstacles=[{x:0,z:0,w:.2,d:4}];n.players[0].x=-.5;n.players[0].z=0;n.players[7].x=.5;n.players[7].z=0;for(let i=0;i<90;i++)n.step(1/60);assert.equal(n.players[0].infected,false);
 });
 test('pool attacks sink the targeted platform and eliminate grounded players',()=>{
- const m=new Match({game:'pool',master:7,humans:8});const p=m.players[0];m.attack(p);for(let i=0;i<80;i++)m.step(1/60);assert.equal(p.alive,false);assert.ok(m.tiles.some(t=>!t.alive));
+ const m=new Match({game:'pool',master:7,humans:8});const p=m.players[0];m.launchPool(7,{id:1,x:-p.x/10.5,y:(p.z+9)/18});for(let i=0;i<80;i++)m.step(1/60);assert.equal(p.alive,false);assert.ok(m.tiles.some(t=>!t.alive));
 });
 test('all minigames terminate, assign exactly one master, and return bounded scores',()=>{
  for(const game of Object.keys(GAMES))for(let seed=1;seed<=4;seed++){
@@ -30,7 +30,7 @@ test('all minigames terminate, assign exactly one master, and return bounded sco
  }
 });
 test('human master actions have cooldowns and both local players can move',()=>{
- const m=new Match({game:'pool',master:0,humans:2});m.step(1/60,{0:{action:true},1:{x:1,z:0}});assert.equal(m.hazards.length,1);m.step(1/60,{0:{action:true}});assert.equal(m.hazards.length,1);
+ const m=new Match({game:'pool',master:0,humans:2});m.step(1/60,{0:{shot:{id:1,x:0,y:.5}},1:{x:1,z:0}});assert.equal(m.hazards.length,1);m.step(1/60,{0:{shot:{id:2,x:0,y:.5}}});assert.equal(m.hazards.length,1);
  const z=new Match({game:'zombie',humans:2});const old=z.players.map(p=>p.x);z.step(1/60,{0:{x:1,z:0},1:{x:-1,z:0}});assert.ok(z.players[0].x>old[0]);assert.ok(z.players[1].x<old[1]);
 });
 
@@ -111,4 +111,60 @@ test('spin touch input is directional, ignores depth and jumping, and bots must 
  bots.step(1/60,{0:{reverse:true}});assert.equal(b.brain.x,-1);
  const angle=b.rimAngle;advance(bots,.3,{});assert.ok(b.rimAngle<angle);
  advance(bots,.3,{});assert.equal(b.brain.x,1);assert.ok(b.alive);
+});
+
+const shotAt=(point,id=1)=>({id,x:-point.x/10.5,y:(point.z+9)/18});
+test('pool is tiled by ten connected 2–5 cell pieces with exact seamless outlines',()=>{
+ const {tiles,pieces}=makePool();assert.equal(tiles.length,36);assert.equal(pieces.length,10);
+ assert.equal(new Set(tiles.map(t=>`${t.gx},${t.gz}`)).size,36);
+ for(const piece of pieces){
+  assert.ok(piece.cells.length>=2&&piece.cells.length<=5);
+  const visited=new Set([piece.cells[0]]),queue=[piece.cells[0]];
+  for(const t of queue)for(const q of piece.cells)if(!visited.has(q)&&Math.abs(t.gx-q.gx)+Math.abs(t.gz-q.gz)===1){visited.add(q);queue.push(q);}
+  assert.equal(visited.size,piece.cells.length);
+  const outline=poolOutline(piece.cells),area=Math.abs(outline.reduce((sum,p,i)=>{const q=outline[(i+1)%outline.length];return sum+p[0]*q[1]-p[1]*q[0];},0)/2);
+  assert.equal(area,piece.cells.length,'outline must retain concave U/L corners');
+  for(const cell of piece.cells)assert.equal(poolHit(tiles,cell,0).piece,piece.id);
+ }
+ assert.equal(POOL_LAYOUT[0],'AAABBB');
+});
+test('hitting any cell sinks exactly that whole piece; adjacent pieces and empty holes survive',()=>{
+ for(const pieceId of [0,1,2,8]){
+  const m=new Match({game:'pool',humans:8}),piece=m.pieces[pieceId];
+  m.launchPool(7,shotAt(piece.cells.at(-1)));advance(m,1.2,{});
+  assert.equal(piece.alive,false);assert.ok(piece.cells.every(t=>!t.alive));
+  assert.ok(m.pieces.filter(p=>p.id!==pieceId).every(p=>p.alive&&p.cells.every(t=>t.alive)));
+ }
+ const m=new Match({game:'pool',humans:8}),hole=m.pieces[3].cells[0];
+ m.pieces[3].cells.forEach(t=>t.alive=false);m.pieces[3].alive=false;
+ m.launchPool(7,shotAt(hole));advance(m,1.2,{});assert.equal(m.pieces.filter(p=>!p.alive).length,1);
+});
+test('pool shot range covers all cells, misses stay misses, and edge forgiveness is bounded',()=>{
+ const {tiles}=makePool();
+ for(const t of tiles){const aim=poolAim(shotAt(t));assert.ok(Math.abs(aim.x-t.x)<1e-10&&Math.abs(aim.z-t.z)<1e-10);}
+ assert.ok(poolHit(tiles,{x:8.6,z:7}));assert.equal(poolHit(tiles,{x:9,z:7}),null);
+ const m=new Match({game:'pool',humans:8});m.launchPool(7,{id:1,x:1,y:1});advance(m,1.2,{});
+ assert.ok(m.pieces.every(p=>p.alive));assert.equal(m.hazards[0].piece,null);
+ assert.equal(poolAim({x:NaN,y:.5}),null);assert.equal(poolAim({x:0,y:.01}),null);assert.equal(poolAim({x:0,y:Infinity}),null);
+});
+test('pool requires one fresh release per shot; action keys, retries, cooldown and wrong roles cannot bypass it',()=>{
+ for(const master of [0,1,7]){
+  const m=new Match({game:'pool',master,humans:8});
+  m.action(m.players[master]);assert.equal(m.hazards.length,0);
+  assert.equal(m.launchPool((master+1)%8,{id:1,x:0,y:.5}),false);
+  assert.equal(m.launchPool(master,{id:1,x:0,y:.5}),true);
+  assert.equal(m.players[master].cooldown,POOL.cooldown);
+  assert.equal(m.launchPool(master,{id:2,x:0,y:.5}),false);
+  advance(m,POOL.cooldown+.1,{});
+  assert.equal(m.launchPool(master,{id:2,x:0,y:.5}),false,'rejected release must not become a queued shot');
+  assert.equal(m.launchPool(master,{id:3,x:0,y:.5}),true);
+  assert.equal(m.launchPool(master,{id:4,x:Infinity,y:.5}),false);
+  m.done=true;assert.equal(m.launchPool(master,{id:5,x:0,y:.5}),false);
+ }
+});
+test('jumping avoids immediate drowning, but holding jump cannot hover over a missing piece forever',()=>{
+ const m=new Match({game:'pool',humans:8}),p=m.players[0],piece=m.pieces[poolHit(m.tiles,p).piece];
+ m.action(p);m.step(1/60);piece.cells.forEach(t=>t.alive=false);piece.alive=false;
+ m.step(1/60);assert.ok(p.alive);
+ advance(m,2,{0:{action:true}});assert.equal(p.alive,false);
 });

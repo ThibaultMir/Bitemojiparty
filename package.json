@@ -1,1 +1,13 @@
-{"name":"bitemojiparty","version":"1.0.0","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.js"}}
+{
+  "name": "bitemojiparty",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "vite": "^8.3.0"
+  }
+}

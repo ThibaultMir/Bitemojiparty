@@ -21,18 +21,19 @@ Aucune installation de dépendance ni compilation n'est nécessaire. Three.js 0.
 | Action | Joueur 1 | Joueur 2 | Mobile |
 | --- | --- | --- | --- |
 | Déplacement / visée | ZQSD ou WASD | Flèches | Joystick |
-| Saut / sprint / attaque | Espace | Entrée | Bouton d'action |
+| Saut / sprint / attaque (hors tir de piscine) | Espace | Entrée | Bouton d'action |
+| Lance-pierre de piscine (Game Master) | Glisser puis relâcher à la souris | Même souris quand J2 est maître | Glisser puis relâcher au doigt |
 | Inverser le disque (Game Master) | F | Maj droite | Bouton Inverser |
 | Danse | E | — | Bouton sourire |
 | Pause | Échap ou P | — | Bouton pause |
 
-Le Game Master de Pool Party ou Kick Off peut aussi viser avec la souris et cliquer pour tirer. Les commandes sont rappelées avant chaque manche. La partie se met en pause quand la fenêtre perd le focus ou que l'onglet est masqué.
+Dans Pool Party, le Game Master attrape la balle jaune en bas de l’écran, tire vers le bas puis relâche. La traction horizontale envoie la balle du côté opposé ; la traction verticale règle la portée. Il n’y a ni cible ni trajectoire de visée et les touches d’action ne tirent pas. Kick Off conserve la visée souris et le clic pour frapper. Les commandes sont rappelées avant chaque manche. La partie se met en pause quand la fenêtre perd le focus ou que l'onglet est masqué.
 
 ## Règles implémentées
 
 | Mini-jeu | Durée maximale | Survivants | Game Master |
 | --- | --- | --- | --- |
-| Pool Party | 30 s | Éviter les cibles et les bouées qui coulent ; sauter | Viser et tirer au lance-pierre sur les 36 bouées |
+| Pool Party | 30 s | Surveiller la balle et sauter entre 10 pièces de 2 à 5 cases | Tirer puis relâcher le lance-pierre ; une pièce touchée coule en entier ; recharge 2,4 s |
 | Zombie Escape | 60 s | Fuir, sprinter, contourner les meubles | Infecter après 2 secondes de proximité ; les infectés rejoignent la chasse |
 | Kick Off | 30 s | Esquiver ou sauter la botte, éviter l'éjection | Aligner la jambe mécanique, frapper puis se rétracter |
 | Spin Session (Disco) | 30 s | Courir gauche/droite à contre-sens sur la tranche d’une roue verticale | Inverser le disque et déclencher une accélération temporaire |
@@ -84,3 +85,20 @@ Projet indépendant, non affilié à Snap Inc.
 La roue est verticale (diamètre 18, largeur 8), avec les sept joueurs sur sa tranche et une caméra de face surélevée. Maintenir gauche ou droite à contre-sens annule exactement l’entraînement de la roue ; courir dans son sens double le déplacement vers le vide. Sans commande, le joueur est emporté. Le Game Master inverse immédiatement le sens (F / Maj droite / bouton Inverser) et peut accélérer temporairement. Les bots réagissent avec un délai.
 
 Dans ce mode, seuls gauche/droite servent aux coureurs : ni saut ni déplacement en profondeur. Le joystick mobile devient directionnel pour permettre une compensation complète. La chute commence au-delà de l’arc supérieur de sécurité, puis conserve la vitesse tangentielle du joueur. Les dimensions, vitesses et seuils sont des paramètres de cette adaptation.
+
+### Piscine et commandes — 11 septembre 2026
+
+Les 36 cases forment désormais dix pièces connectées : U, L, carré, T, zigzag, barre et dominos. Chaque pièce est un seul volume 3D et coule en entier. Une petite tolérance de 0,35 unité au bord facilite les impacts ; un tir dans l’eau ne se rabat jamais sur une pièce distante. La durée reste 30 secondes. La recharge passe de 1,15 à 2,4 secondes et commence au lancement, laissant environ douze occasions de tirer.
+
+Les personnages ont un joystick sur écran tactile dans les quatre modes. Les maîtres ont les commandes de leur épreuve : lance-pierre tactile dans la piscine, joystick de visée et bouton de frappe dans Kick Off, inversion/accélération dans Disco, déplacement/sprint pour le zombie. Le clavier PC reste disponible ; le duo conserve ses commandes séparées et le maître utilise la souris dans la piscine, même si c’est J2.
+
+Chaque contrôle conserve son propre identifiant de pointeur. Les gestes secondaires ne volent pas le joystick, ne relâchent pas une autre action et ne déclenchent pas un second tir. Annulation, perte de capture, pause, changement de manche, redimensionnement et perte de focus effacent les gestes en cours. Un relâchement pendant la recharge est rejeté et ne peut pas être rejoué à sa fin.
+
+### Vérification des commandes
+
+- `npm test` : 26 tests de simulation et de gestion des événements, dont clavier AZERTY/QWERTY, duo, gestes simultanés, annulations, limites de portée, pièces concaves, recharge et répétition des tirs.
+- `npm install` puis `npm run dev` : serveur de développement Vite ; les fichiers de production restent les ressources statiques de `dist/`.
+- Route de développement `/__tests/controls` : banc de test utilisant les vrais contrôles et leur CSS, avec formats PC, 390 × 844 et 844 × 390. Cette route et les tests ne sont pas inclus dans la publication statique.
+- Essais navigateur : drag-and-drop souris, blocage d’un tir pendant la recharge, remise à zéro du joystick, inversion Disco et placement des commandes en portrait/paysage. Le tactile multipoint est simulé dans les tests d’événements ; aucun téléphone physique n’a été testé.
+- Limite : le navigateur fourni désactive WebGL. Le rendu 3D complet n’a donc pas pu être vérifié visuellement ; le banc de test vérifie les commandes, pas le rendu.
+- Vingt simulations avec uniquement des bots se terminent : quinze victoires du maître, cinq manches avec des survivants. Cet échantillon ne remplace pas une validation de difficulté avec des joueurs humains.

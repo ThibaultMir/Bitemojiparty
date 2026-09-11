@@ -1,5 +1,5 @@
 import * as T from './vendor/three.module.js';
-import {COLORS, MANSION, SPIN, makeMansion, distance, lineClear, wrap, poolShotPosition, kickPose} from './simulation.js';
+import {COLORS, MANSION, SPIN, POOL, poolOutline, makeMansion, distance, lineClear, wrap, poolShotPosition, kickPose} from './simulation.js';
 const matCache=new Map();
 const sight={center:{value:new T.Vector2()},radius:{value:1000},enabled:{value:0},fog:{value:new T.Color(.055,.068,.13)}};
 function material(color,extra={}) {
@@ -128,7 +128,20 @@ export class World {
   }
   if(game==='pool') {
    box(g,'#49bccc',0,-1.05,0,34,.4,34);box(g,'#f3d9af',0,-.55,0,24,.4,24);box(g,'#4caac5',0,-.28,0,20,.35,20);box(g,'#69d3df',0,-.06,0,19.3,.12,19.3);
-   const colors=['#f1be5c','#ad9ae1','#6ed8b3','#f39cc2'];for(const [i,t] of match.tiles.entries()){const b=group(g,t.x,0,t.z);pill(b,colors[(Math.floor(i/6)+i%6)%4],0,.1,0,2.7,.5,2.7);box(b,'#ffffff',0,.36,0,1.1,.025,.12);this.tileMeshes.push(b);}
+   const colors=['#f1be5c','#ad9ae1','#6ed8b3','#f39cc2','#78bfee','#ed9971','#98c979','#db8ed0','#e4cf76','#75d7ce'];
+   for(const piece of match.pieces){
+    const outline=poolOutline(piece.cells),shape=new T.Shape();
+    outline.forEach(([x,z],i)=>{
+     const prev=outline[(i+outline.length-1)%outline.length],next=outline[(i+1)%outline.length];
+     const nx=Math.sign(z-prev[1])+Math.sign(next[1]-z),nz=-Math.sign(x-prev[0])-Math.sign(next[0]-x);
+     const px=(x-3)*POOL.cell-nx*.065,pz=(z-3)*POOL.cell-nz*.065;
+     if(i)shape.lineTo(px,-pz);else shape.moveTo(px,-pz);
+    });shape.closePath();
+    const gPiece=group(g,0,-.35,0);
+    const geo=new T.ExtrudeGeometry(shape,{depth:.32,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:.035,bevelThickness:.035});
+    const body=mesh(gPiece,geo,colors[piece.id],0,0,0);body.rotation.x=-Math.PI/2;
+    this.tileMeshes.push(gPiece);
+   }
    for(const x of [-14,14])for(const z of [-12,12])palm(g,x,z,1.5);
    for(const x of [-12,12]){const chair=box(g,'#fc90b5',x,.2,0,1.5,.3,3);box(g,'#fff4d9',x,.2,3,1.5,.3,3);}
    // Slingshot on the Game Master's deck.
@@ -197,7 +210,7 @@ export class World {
   if(this.game==='lobby')this.avatars.forEach((a,i)=>{if(i>0)a.update({...ps[i],emote:1},time,true,i%2+1);});
   this.ghosts.forEach((g,i)=>{g.position.y=2.4+Math.sin(time*1.8+i)*.3;g.rotation.z=Math.sin(time+i)*.1;});
   if(match) {
-   if(this.game==='pool')this.tileMeshes.forEach((g,i)=>{const t=match.tiles[i];g.position.y=t.alive?Math.sin(time*2+i)*.025:Math.max(-3,g.position.y-.09);g.visible=g.position.y>-2.8;g.rotation.z=t.alive?0:Math.sin(time*6+i)*.15;});
+   if(this.game==='pool')this.tileMeshes.forEach((g,i)=>{const p=match.pieces[i];g.position.y=p.alive?-.35+Math.sin(time*2+i)*.02:Math.max(-3,g.position.y-.09);g.visible=g.position.y>-2.8;});
    if(this.game==='spin'&&this.spinGroup){
     this.spinGroup.rotation.z=-match.angle;
     if(this.spinSign.userData.direction!==match.direction){
@@ -206,16 +219,16 @@ export class World {
      this.spinSign.position.set(0,-6,4.3);this.spinSign.userData.direction=match.direction;this.root.add(this.spinSign);
     }
    }
-   this.cursor.visible=match.master<match.humans&&this.game!=='zombie'&&this.game!=='spin';this.cursor.position.set(match.target.x,.6,this.game==='kick'?0:match.target.z);this.cursor.scale.setScalar(1+Math.sin(time*8)*.1);
+   this.cursor.visible=match.master<match.humans&&this.game==='kick';this.cursor.position.set(match.target.x,.6,this.game==='kick'?0:match.target.z);this.cursor.scale.setScalar(1+Math.sin(time*8)*.1);
    if(this.game==='kick') {this.bootHome.position.x=match.target.x;this.bootHome.visible=!match.hazards.some(h=>h.type==='boot');}
    const alive=new Set(match.hazards);
    for(const [h,g] of this.hazardMeshes)if(!alive.has(h)){this.dynamic.remove(g);g.traverse(o=>{if(o.geometry&&!Object.values(geometries).includes(o.geometry))o.geometry.dispose();});this.hazardMeshes.delete(h);}
    for(const h of match.hazards) {
     let g=this.hazardMeshes.get(h);
-    if(!g){g=group(this.dynamic,h.x,.1,h.z);if(h.type==='splash'){const disk=cyl(g,'#ff626e',0,0,0,1.3,.07);torus(g,'#ffe7a1',0,.08,0,1.3,.07);const toy=group(g);orb(toy,'#ffd564',0,0,0,.7);orb(toy,'#fff7e8',0,.15,.55,.46,.46,.2);orb(toy,'#78d9dc',0,-.3,-.45,.5,.28,.3);g.userData.toy=toy;}
+    if(!g){g=group(this.dynamic,h.x,.1,h.z);if(h.type==='splash'){const splash=group(g);torus(splash,'#ffffff',0,.08,0,1.3,.07);torus(splash,'#9ff4ff',0,.08,0,.8,.09);g.userData.splash=splash;const toy=group(g);orb(toy,'#ffd564',0,0,0,.7);orb(toy,'#fff7e8',0,.15,.55,.46,.46,.2);orb(toy,'#78d9dc',0,-.3,-.45,.5,.28,.3);g.userData.toy=toy;}
      else {box(g,'#fb7779',0,0,0,3.2,.05,19);const boot=this.boot(g,0,-11);g.userData.boot=boot;g.userData.leg=box(g,'#98a2b6',0,1.4,-11,.7,.7,1);cyl(g,'#675676',0,.8,-11,1.2,1.6);}
      this.hazardMeshes.set(h,g);}
-    if(h.type==='splash'){g.position.set(h.x,.3,h.z);const shot=poolShotPosition(h);g.userData.toy.position.set(shot.x-h.x,shot.y-.3,shot.z-h.z);g.userData.toy.rotation.x=h.age*7;g.userData.toy.visible=h.age<h.delay;g.visible=h.age<1.35;g.children[0].visible=Math.sin(time*16)>-.4;}
+    if(h.type==='splash'){g.position.set(h.x,.3,h.z);const shot=poolShotPosition(h);g.userData.toy.position.set(shot.x-h.x,shot.y-.3,shot.z-h.z);g.userData.toy.rotation.x=h.age*7;g.userData.toy.visible=h.age<h.delay;g.visible=h.age<h.delay+.45;g.userData.splash.visible=h.age>=h.delay;g.userData.splash.scale.setScalar(1+Math.max(0,h.age-h.delay)*3);}
     else{g.position.set(h.x,.13,0);g.children[0].visible=h.age<h.delay;const pose=kickPose(h);g.userData.boot.position.z=pose.z;g.userData.boot.rotation.x=h.age<h.delay?-.3*Math.sin(h.age/h.delay*Math.PI):0;g.userData.leg.position.z=(-11+pose.z)/2;g.userData.leg.scale.z=Math.max(.5,pose.z+11);}
    }
   }

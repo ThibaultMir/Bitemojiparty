@@ -23,6 +23,8 @@ Les recherches ont porté sur les titres exacts, les commandes, les témoignages
 
 ## Pool Party
 
+**Correction utilisateur du 11 septembre 2026 :** les 36 cases sont regroupées en dix pièces connectées de 2 à 5 cases (U, L, carré, T, zigzag, barre, dominos). La pièce touchée coule en entier. Le tir se fait par traction puis relâchement à la souris ou au doigt, sans cible ni trajectoire prévisionnelle. Recharge : 2,4 secondes ; tolérance de bord : 0,35 unité. Ces choix remplacent les lignes historiques ci-dessous et reposent sur la demande utilisateur, pas sur de nouvelles observations du jeu original.
+
 **Principe confirmé :** un joueur attaque au lance-pierre ; les autres évitent de tomber lorsque des dalles de piscine sont visées et coulent (S4).
 
 | Point | Avant | Maintenant | Statut |
