@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tests des commandes Bitemoji Party</title>
+<style>body{margin:0;font:16px system-ui;background:#e5e8f4;color:#262541}header{padding:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}button,select{font:inherit;padding:8px}iframe{display:block;border:0;margin:auto;background:#b8d9e1}output{font:14px monospace;white-space:pre-wrap}h1{font-size:18px;margin:0}</style>
+<body><script type="module">
+import {bindPointerControls,readKeyboardInputs} from '/controls.js';
+import {Match} from '/simulation.js';
+const params=new URLSearchParams(location.search);
+if(!params.has('frame')){
+ document.body.innerHTML='<header><h1>Commandes réelles · sans rendu 3D</h1><button id="desktop">Format PC</button><button id="mobile">Format téléphone</button><button id="landscape">Téléphone paysage</button><select id="mode" aria-label="Mode à tester"><option value="pool-master">Piscine Game Master</option><option value="pool-runner">Piscine personnage</option><option value="kick-master">Kick Off Game Master</option><option value="zombie-runner">Zombie personnage</option><option value="spin-runner">Disco personnage</option><option value="spin-master">Disco Game Master</option></select><button id="reset">Réinitialiser</button><output id="result"></output></header><iframe id="stage" title="Commandes du jeu"></iframe>';
+ const stage=document.querySelector('iframe'),select=document.querySelector('select');let touch=false;
+ const load=()=>{stage.src=location.pathname+'?frame=1&mode='+select.value+(touch?'&touch=1':'');};
+ document.querySelector('#desktop').onclick=()=>{touch=false;stage.style.width='100%';stage.style.height='700px';load();};
+ document.querySelector('#mobile').onclick=()=>{touch=true;stage.style.width='390px';stage.style.height='844px';load();};
+ document.querySelector('#landscape').onclick=()=>{touch=true;stage.style.width='844px';stage.style.height='390px';load();};
+ select.onchange=load;document.querySelector('#reset').onclick=load;
+ window.addEventListener('message',e=>{if(e.origin===location.origin&&e.source===stage.contentWindow)document.querySelector('#result').textContent=JSON.stringify(e.data);});
+ document.querySelector('#desktop').click();
+}else{
+ const link=document.createElement('link');link.rel='stylesheet';link.href='/style.css';document.head.append(link);
+ const html=new DOMParser().parseFromString(await(await fetch('/index.html')).text(),'text/html');
+ document.body.append(html.querySelector('#hud'));document.querySelector('#hud').hidden=false;document.body.dataset.screen='playing';
+ document.body.style.background='#668c9e';
+ if(params.has('touch')){const style=document.createElement('style');style.textContent='#joystick{display:block}.in-game-help{max-width:85%;white-space:normal}';document.head.append(style);}
+ const [game='pool',role='master']=(params.get('mode')||'pool-master').split('-'),master=role==='master'?0:7;
+ const match=new Match({game,master,humans:1}),keys=new Set();let sequence=0,playing=true,shots=0,last=0;
+ const $=id=>document.getElementById(id),gm=master===0;
+ $('game-title').textContent='Test '+game;$('round-label').textContent='COMMANDES UNIQUEMENT';$('remaining').textContent='';$('role').textContent=gm?'GAME MASTER':'PERSONNAGE';$('emote').hidden=true;
+ $('sling-control').hidden=!(game==='pool'&&gm);$('joystick').hidden=gm&&['pool','spin'].includes(game);
+ $('action-button').hidden=(game==='pool'&&gm)||(game==='spin'&&!gm);$('reverse').hidden=!(game==='spin'&&gm);
+ $('action-label').textContent=match.config[gm?'masterAction':'action'];$('joystick').querySelector('span').textContent=gm?'VISER':'DÉPLACER';
+ $('game-help').textContent=match.config[gm?'master':'runner'];
+ const controls=bindPointerControls({canvas:document.createElement('canvas'),joystick:$('joystick'),stick:$('stick'),action:$('action-button'),sling:$('sling'),ball:$('sling-ball'),elastic:$('sling-elastic'),getState:()=>({playing,game,master,humans:1,alive:true,cooldown:match.players[master].cooldown,match}),aimAt:(x,y)=>({x,z:y}),onShot:pull=>{if(match.launchPool(master,{...pull,id:++sequence}))shots++;}});
+ $('pause').onclick=()=>{playing=!playing;keys.clear();controls.clear();$('role').textContent=playing?'ACTIF':'PAUSE';};
+ $('reverse').onclick=()=>{if(playing)match.reverseSpin();};
+ document.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.code==='Escape')$('pause').click();});
+ document.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();controls.clear();});window.addEventListener('resize',()=>controls.clear());
+ function frame(now){const dt=Math.min((now-(last||now))/1000,.04);last=now;if(playing)match.players[master].cooldown=Math.max(0,match.players[master].cooldown-dt);
+  $('sling').disabled=match.players[master].cooldown>0||!playing;$('sling-status').textContent=match.players[master].cooldown>0?'Recharge · '+match.players[master].cooldown.toFixed(1)+' s':'Tire vers le bas, puis relâche';
+  const input=readKeyboardInputs(keys,controls.state,match);$('cooldown-label').textContent=input[0].action?'ACTION ACTIVE':'PRÊT';
+  parent.postMessage({shots,pull:controls.state.pull,input,playing,direction:match.direction},location.origin);requestAnimationFrame(frame);
+ }requestAnimationFrame(frame);
+}
+</script></body></html>
