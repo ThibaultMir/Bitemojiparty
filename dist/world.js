@@ -1,5 +1,5 @@
 import * as T from './vendor/three.module.js';
-import {COLORS, MANSION, SPIN, POOL, poolOutline, makeMansion, distance, lineClear, wrap, poolShotPosition, kickPose} from './simulation.js';
+import {COLORS, MANSION, SPIN, POOL, poolOutline, poolHit, poolPieceY, makeMansion, distance, lineClear, wrap, poolShotPosition, kickPose} from './simulation.js';
 const matCache=new Map();
 const sight={center:{value:new T.Vector2()},radius:{value:1000},enabled:{value:0},fog:{value:new T.Color(.055,.068,.13)}};
 function material(color,extra={}) {
@@ -22,6 +22,23 @@ const cyl=(p,c,x,y,z,r,h)=>mesh(p,geometries.cylinder,c,x,y,z,r,h,r);
 function pill(p,c,x,y,z,w,h,d) {return mesh(p,geometries.capsule,c,x,y,z,w,h/2,d);}
 function torus(p,c,x,y,z,r,t,rx=Math.PI/2) {const m=mesh(p,new T.TorusGeometry(r,t,8,32),c,x,y,z);m.rotation.x=rx;return m;}
 function group(parent,x=0,y=0,z=0) {const g=new T.Group();g.position.set(x,y,z);parent.add(g);return g;}
+// Raised, bevelled solid pieces: their lowest floating top stays above the water.
+export function createPoolPiece(parent,piece) {
+ const colors=['#f1be5c','#ad9ae1','#6ed8b3','#f39cc2','#78bfee','#ed9971','#98c979','#db8ed0','#e4cf76','#75d7ce'];
+ const outline=poolOutline(piece.cells),shape=new T.Shape();
+ outline.forEach(([x,z],i)=>{
+  const prev=outline[(i+outline.length-1)%outline.length],next=outline[(i+1)%outline.length];
+  const nx=Math.sign(z-prev[1])+Math.sign(next[1]-z),nz=-Math.sign(x-prev[0])-Math.sign(next[0]-x);
+  const px=(x-3)*POOL.cell-nx*.065,pz=(z-3)*POOL.cell-nz*.065;
+  if(i)shape.lineTo(px,-pz);else shape.moveTo(px,-pz);
+ });shape.closePath();
+ const g=group(parent,0,poolPieceY(piece,0),0);
+ const geo=new T.ExtrudeGeometry(shape,{depth:POOL.thickness,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:POOL.bevel,bevelThickness:POOL.bevel});
+ const color=colors[piece.id],side='#'+new T.Color(color).multiplyScalar(.62).getHexString();
+ const body=new T.Mesh(geo,[material(color),material(side)]);
+ body.rotation.x=-Math.PI/2;body.receiveShadow=true;body.castShadow=true;g.add(body);
+ return g;
+}
 function textSprite(text,color='#ffffff',size=1) {
  const c=document.createElement('canvas');c.width=512;c.height=128;const ctx=c.getContext('2d');ctx.font='900 56px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.strokeStyle='#202037';ctx.lineWidth=9;ctx.lineJoin='round';ctx.strokeText(text,256,64);ctx.fillStyle=color;ctx.fillText(text,256,64);
  const tex=new T.CanvasTexture(c);tex.colorSpace=T.SRGBColorSpace;const m=new T.SpriteMaterial({map:tex,transparent:true,depthTest:false});const s=new T.Sprite(m);s.scale.set(3.8*size,.95*size,1);return s;
@@ -128,25 +145,15 @@ export class World {
   }
   if(game==='pool') {
    box(g,'#49bccc',0,-1.05,0,34,.4,34);box(g,'#f3d9af',0,-.55,0,24,.4,24);box(g,'#4caac5',0,-.28,0,20,.35,20);box(g,'#69d3df',0,-.06,0,19.3,.12,19.3);
-   const colors=['#f1be5c','#ad9ae1','#6ed8b3','#f39cc2','#78bfee','#ed9971','#98c979','#db8ed0','#e4cf76','#75d7ce'];
-   for(const piece of match.pieces){
-    const outline=poolOutline(piece.cells),shape=new T.Shape();
-    outline.forEach(([x,z],i)=>{
-     const prev=outline[(i+outline.length-1)%outline.length],next=outline[(i+1)%outline.length];
-     const nx=Math.sign(z-prev[1])+Math.sign(next[1]-z),nz=-Math.sign(x-prev[0])-Math.sign(next[0]-x);
-     const px=(x-3)*POOL.cell-nx*.065,pz=(z-3)*POOL.cell-nz*.065;
-     if(i)shape.lineTo(px,-pz);else shape.moveTo(px,-pz);
-    });shape.closePath();
-    const gPiece=group(g,0,-.35,0);
-    const geo=new T.ExtrudeGeometry(shape,{depth:.32,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:.035,bevelThickness:.035});
-    const body=mesh(gPiece,geo,colors[piece.id],0,0,0);body.rotation.x=-Math.PI/2;
-    this.tileMeshes.push(gPiece);
-   }
+   for(const piece of match.pieces)this.tileMeshes.push(createPoolPiece(g,piece));
    for(const x of [-14,14])for(const z of [-12,12])palm(g,x,z,1.5);
    for(const x of [-12,12]){const chair=box(g,'#fc90b5',x,.2,0,1.5,.3,3);box(g,'#fff4d9',x,.2,3,1.5,.3,3);}
-   // Slingshot on the Game Master's deck.
-   cyl(g,'#87534e',-1.2,1.3,-11.8,.18,2.6);cyl(g,'#87534e',1.2,1.3,-11.8,.18,2.6);box(g,'#e8bb78',0,.45,-11.8,3.2,.25,.8);const band=box(g,'#bc7777',0,2.4,-11.8,2.5,.1,.12);
-   orb(g,'#ffe36d',0,2.25,-11.6,.4);for(const z of [-6,0,6])torus(g,'#ffffff',11,.1,z,.7,.19);
+   // Near side of the pool, matching the bottom-screen pull-and-release UI.
+   box(g,'#f3d9af',1,-.15,POOL.launcherZ+.4,8,.3,3);
+   const launcher=group(g,0,0,POOL.launcherZ);
+   cyl(launcher,'#87534e',-1.2,1.3,0,.18,2.6);cyl(launcher,'#87534e',1.2,1.3,0,.18,2.6);
+   box(launcher,'#e8bb78',0,.45,0,3.2,.25,.8);box(launcher,'#bc7777',0,2.4,0,2.5,.1,.12);
+   orb(launcher,'#ffe36d',0,2.4,0,.4);for(const z of [-6,0,6])torus(g,'#ffffff',11,.1,z,.7,.19);
   }
   if(game==='zombie') {
    box(g,'#292942',0,-.5,0,42,.85,52);tiles(g,20,25,2,['#66526a','#72586b']);
@@ -206,11 +213,14 @@ export class World {
  }
  update(match,roster,time,{dance=0,two=false,lobby=false}={}) {
   const ps=match?match.players:roster;
-  this.avatars.forEach((a,i)=>a.update({...ps[i],master:match&&i===match.master},time,lobby,dance));
+  this.avatars.forEach((a,i)=>{
+   const p=ps[i];a.update({...p,master:match&&i===match.master},time,lobby,dance);
+   if(this.game==='pool'&&p.alive&&i!==match.master){const t=poolHit(match.tiles,p,0);if(t)a.root.position.y+=Math.sin(match.time*2+t.piece)*POOL.bob;}
+  });
   if(this.game==='lobby')this.avatars.forEach((a,i)=>{if(i>0)a.update({...ps[i],emote:1},time,true,i%2+1);});
   this.ghosts.forEach((g,i)=>{g.position.y=2.4+Math.sin(time*1.8+i)*.3;g.rotation.z=Math.sin(time+i)*.1;});
   if(match) {
-   if(this.game==='pool')this.tileMeshes.forEach((g,i)=>{const p=match.pieces[i];g.position.y=p.alive?-.35+Math.sin(time*2+i)*.02:Math.max(-3,g.position.y-.09);g.visible=g.position.y>-2.8;});
+   if(this.game==='pool')this.tileMeshes.forEach((g,i)=>{const p=match.pieces[i];g.position.y=poolPieceY(p,match.time);g.visible=g.position.y+POOL.thickness+POOL.bevel>0;});
    if(this.game==='spin'&&this.spinGroup){
     this.spinGroup.rotation.z=-match.angle;
     if(this.spinSign.userData.direction!==match.direction){

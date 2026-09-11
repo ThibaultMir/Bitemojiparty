@@ -3,7 +3,11 @@ export const BASE_AREA = 20 * 20;
 export const MANSION = { width: 40, depth: 50, vision: 11, area: 2000 };
 // Exact timing is an adaptation of Snap’s description: stay close for a few seconds.
 export const INFECTION_SECONDS = 2;
-export const POOL = {cell:2.8, minPull:.08, cooldown:2.4, hitTolerance:.35, flight:1.05};
+export const POOL = {cell:2.8, minPull:.08, cooldown:2.4, hitTolerance:.35, flight:1.05, launcherZ:11.8, surfaceY:.6, thickness:.72, bevel:.04, bob:.02};
+export function poolPieceY(piece,time) {
+ const t=piece.alive?time:(piece.sunkAt??0);
+ return POOL.surfaceY-POOL.thickness-POOL.bevel+Math.sin(t*2+piece.id)*POOL.bob-(piece.alive?0:Math.max(0,time-t)*4);
+}
 // Ten connected pieces, 2–5 cells each; no overlapping or isolated cells.
 export const POOL_LAYOUT = ['AAABBB','ADACCB','FDDCCB','FDEEGG','FEEIIG','FHHHJJ'];
 export function makePool() {
@@ -36,10 +40,10 @@ export function poolHit(tiles,point,tolerance=POOL.hitTolerance) {
 }
 export function poolAim(pull) {
  if(!Number.isFinite(pull?.x)||!Number.isFinite(pull?.y)||pull.y<POOL.minPull)return null;
- return {x:-clamp(pull.x,-1,1)*10.5,z:-9+clamp(pull.y,0,1)*18};
+ return {x:-clamp(pull.x,-1,1)*10.5,z:9-clamp(pull.y,0,1)*18};
 }
 // Vertical wheel in the x/y plane; z is the width of its running surface.
-export const SPIN = {radius:9, width:8, centerY:-7, fallAngle:.95};
+export const SPIN = {radius:9, width:8, centerY:-7, fallAngle:.95, boostSpeed:.04, boostDuration:2.6, boostCooldown:5};
 export function spinPosition(angle) {
  return {x:SPIN.radius*Math.sin(angle),y:SPIN.centerY+SPIN.radius*Math.cos(angle)};
 }
@@ -52,7 +56,7 @@ export const GAMES = {
  pool: {name:'Pool Party', icon:'🌊', color:'#51d5ed', duration:30, subtitle:'Garde les pieds au sec.', runner:'Surveille la balle et saute entre les pièces. Une pièce touchée coule en entier !', master:'Tire la balle vers le bas puis relâche. Plus tu tires, plus elle va loin ; tire du côté opposé pour diriger le tir. Recharge : 2,4 s.', action:'Sauter', masterAction:'Lancer'},
  zombie: {name:'Zombie Escape', icon:'👻', color:'#b1ee75', duration:60, subtitle:'Bienvenue au manoir des trouillards.', runner:'Fuis les zombies jusqu’à la fin. Le sprint peut te sauver !', master:'Reste 2 secondes près d’un humain pour l’infecter. Il rejoint ton équipe.', action:'Sprinter', masterAction:'Sprinter'},
  kick: {name:'Kick Off', icon:'👟', color:'#ffa96c', duration:30, subtitle:'Attention à la pointure 300.', runner:'Évite la zone rouge. Saute la botte et reste sur le terrain.', master:'Aligne la jambe mécanique, puis déclenche un coup de pied.', action:'Sauter', masterAction:'Shooter'},
- spin: {name:'Spin Session', icon:'🌀', color:'#d4a7ff', duration:30, subtitle:'Disco : garde le cap sur la roue !', runner:'Sur la tranche de la roue, maintiens gauche ou droite à contre-sens. Change vite quand le Game Master inverse !', master:'Inverse le sens de la roue pour piéger les joueurs. Accélère pour réduire leur temps de réaction.', action:'Courir', masterAction:'Accélérer'}
+ spin: {name:'Spin Session', icon:'🌀', color:'#d4a7ff', duration:30, subtitle:'Disco : garde le cap sur la roue !', runner:'Sur la tranche de la roue, maintiens gauche ou droite à contre-sens. Change vite quand le Game Master inverse ! Le boost t’entraîne légèrement, même à contre-sens.', master:'Inverse le sens de la roue pour piéger les joueurs. Le boost entraîne légèrement les joueurs malgré leur course à contre-sens. Recharge : 5 s. Tu dois inverser entre deux boosts.', action:'Courir', masterAction:'Accélérer'}
 };
 export const COLORS = ['#ffca48','#55d6cf','#f78bc1','#8c94ff','#fd926d','#a0dc79','#c690eb','#f56f80'];
 export const NAMES = ['Toi','Milo','Lola','Sacha','Zoé','Noé','Jade','Gus'];
@@ -62,7 +66,7 @@ export const wrap = a=>Math.atan2(Math.sin(a),Math.cos(a));
 export function seededRandom(seed=1) { return ()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296;}; }
 export function poolShotPosition(h) {
  const u=clamp(h.age/h.delay,0,1);
- return {x:h.x*u,y:2.4*(1-u)+.35*u+20*u*(1-u),z:-11.8+(h.z+11.8)*u};
+ return {x:h.x*u,y:2.4*(1-u)+(POOL.surfaceY+.35)*u+20*u*(1-u),z:POOL.launcherZ+(h.z-POOL.launcherZ)*u};
 }
 // A mounted leg winds up, extends, then retracts; it is not a free-flying projectile.
 export function kickPose(h) {
@@ -122,25 +126,26 @@ export class Match {
   Object.assign(this,makePool());this.lastPoolShot=0;
   this.players=Array.from({length:8},(_,i)=>({id:i,name:names[i],color:colors[i],x:Math.cos(i/8*Math.PI*2)*4.5,z:Math.sin(i/8*Math.PI*2)*4.5,angle:0,jump:0,jumpV:0,alive:true,infected:game==='zombie'&&i===master,infection:0,cooldown:0,dash:0,vx:0,vz:0,walk:0,survived:0,outAt:null,botAt:0,brain:{x:0,z:0},path:[],input:{},emote:0}));
   if(game==='zombie') {const spots=[[-11,-17],[11,18],[-3,4],[11,-17],[-11,17],[3,-4],[-11,4],[11,-4]];this.players.forEach((p,i)=>{[p.x,p.z]=spots[i];});}
-  if(game==='pool')this.players.forEach((p,i)=>{const t=this.tiles[[8,10,14,16,20,22,26,28][i]];p.x=t.x;p.z=t.z;});
+  if(game==='pool')this.players.forEach((p,i)=>{const t=this.tiles[[8,10,14,16,20,22,26,28][i]];p.x=t.x;p.z=t.z;p.y=POOL.surfaceY;});
   if(game==='spin') {
-   this.spinSpeed=.42;
+   this.spinSpeed=.42;this.boostNeedsReverse=false;
    this.players.filter(p=>p.id!==master).forEach((p,i)=>{
     p.rimAngle=[-.18,.12,-.08,.2,-.2,.04,.16][i];p.z=i-3;Object.assign(p,spinPosition(p.rimAngle));
     p.brain={x:-this.direction,z:0};p.botAt=.28+random()*.47;
    });
   }
   if(game!=='zombie'){const gm=this.players[master];gm.x=0;gm.z=-12;}
+  if(game==='pool'){Object.assign(this.players[master],{x:3.6,z:POOL.launcherZ+.8,y:0,angle:Math.PI});}
   if(game==='spin'){this.players[master].z=-6;this.players[master].y=4;}
  }
  event(type,p,extra={}) {this.events.push({type,id:p?.id,...extra});}
- reverseSpin() {if(this.game!=='spin'||this.done)return;this.direction*=-1;this.event('reverse',this.players[this.master]);}
+ reverseSpin() {if(this.game!=='spin'||this.done)return;this.direction*=-1;this.boostNeedsReverse=false;this.event('reverse',this.players[this.master]);}
  eliminate(p) {if(!p.alive)return;p.alive=false;p.outAt=this.time;p.jumpV=5;this.event('out',p);}
  action(p) {
-  if(!p.alive||p.cooldown>0)return;
+  if(this.done||!p.alive||p.cooldown>0)return;
   if(this.game==='zombie'){p.dash=.48;p.cooldown=3.3;this.event('dash',p);return;}
   if(p.id===this.master) {
-   if(this.game==='spin'){this.boost=2.6;p.cooldown=4.5;this.event('boost',p);}
+   if(this.game==='spin'&&!this.boostNeedsReverse){this.boost=SPIN.boostDuration;p.cooldown=SPIN.boostCooldown;this.boostNeedsReverse=true;this.event('boost',p);}
    else if(this.game==='kick'){this.attack(this.target);p.cooldown=1.55;}
    return;
   }
@@ -166,7 +171,7 @@ export class Match {
    if(this.time>=this.nextAttack) {
     const targets=this.players.filter(q=>q.alive&&q.id!==this.master);const t=targets[Math.floor(r()*targets.length)];
     if(t){
-     if(this.game==='pool')this.launchPool(p.id,{id:this.lastPoolShot+1,x:-(t.x+(r()-.5)*2)/10.5,y:(t.z+9+(r()-.5)*2)/18});
+     if(this.game==='pool')this.launchPool(p.id,{id:this.lastPoolShot+1,x:-(t.x+(r()-.5)*2)/10.5,y:(9-t.z+(r()-.5)*2)/18});
      else {this.target={x:t.x+(r()-.5)*2,z:t.z};this.action(p);}
     }
     if(this.game==='spin'&&r()<.65)this.reverseSpin();
@@ -228,7 +233,7 @@ export class Match {
    if(input.action)this.action(gm);
    if(input.reverse&&gm.reverseReady!==false){this.reverseSpin();gm.reverseReady=false;}
    else if(!input.reverse)gm.reverseReady=true;
-   this.spinSpeed=(.42+this.time*.01+(this.boost>0 ? .35 : 0))*this.direction;
+   this.spinSpeed=(.42+this.time*.01+(this.boost>0?SPIN.boostSpeed:0))*this.direction;
    this.angle+=this.spinSpeed*dt;
   }
   for(const p of this.players) {
@@ -241,10 +246,10 @@ export class Match {
    if(input.aim&&p.id===this.master&&this.game==='kick')this.target={x:clamp(input.aim.x,-8,8),z:clamp(input.aim.z,-8,8)};
    if(input.action)this.action(p);
    if(this.game==='spin') {
-    // Opposing full input cancels surface travel; matching it doubles the drift.
+    // Running cancels normal rotation. Boost adds a slight unavoidable drift.
     // A touch stick is directional here: vertical input cannot dilute compensation.
     const dx=Math.abs(input.x||0)>.15?Math.sign(input.x):0;
-    const angularVelocity=this.spinSpeed+dx*Math.abs(this.spinSpeed);
+    const angularVelocity=this.spinSpeed+dx*(.42+this.time*.01);
     p.rimAngle+=angularVelocity*dt;Object.assign(p,spinPosition(p.rimAngle));
     if(dx){p.angle=dx*Math.PI/2;p.walk+=dt*12;}else p.walk=0;
     if(Math.abs(p.rimAngle)>=SPIN.fallAngle){
@@ -288,7 +293,7 @@ export class Match {
    h.age+=dt;
    if(h.type==='splash'&&h.age>=h.delay&&!h.hit) {
     h.hit=true;const tile=poolHit(this.tiles,h);
-    if(tile){const piece=this.pieces[tile.piece];piece.alive=false;piece.cells.forEach(t=>t.alive=false);h.piece=piece.id;}
+    if(tile){const piece=this.pieces[tile.piece];piece.alive=false;piece.sunkAt=this.time;piece.cells.forEach(t=>t.alive=false);h.piece=piece.id;}
     this.event('splash',null,{x:h.x,z:h.z});
     for(const p of this.players)if(p.alive&&p.id!==this.master&&distance(p,h)<2.3&&p.jump<.6){p.vx=(p.x-h.x||.3)*5;p.vz=(p.z-h.z||.3)*5;}
    }

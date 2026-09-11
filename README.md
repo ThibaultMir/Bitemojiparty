@@ -96,9 +96,19 @@ Chaque contrôle conserve son propre identifiant de pointeur. Les gestes seconda
 
 ### Vérification des commandes
 
-- `npm test` : 26 tests de simulation et de gestion des événements, dont clavier AZERTY/QWERTY, duo, gestes simultanés, annulations, limites de portée, pièces concaves, recharge et répétition des tirs.
+- `npm test` : 31 tests de simulation et de gestion des événements, dont clavier AZERTY/QWERTY, duo, gestes simultanés, annulations, limites de portée, pièces concaves, recharge et répétition des tirs.
 - `npm install` puis `npm run dev` : serveur de développement Vite ; les fichiers de production restent les ressources statiques de `dist/`.
 - Route de développement `/__tests/controls` : banc de test utilisant les vrais contrôles et leur CSS, avec formats PC, 390 × 844 et 844 × 390. Cette route et les tests ne sont pas inclus dans la publication statique.
 - Essais navigateur : drag-and-drop souris, blocage d’un tir pendant la recharge, remise à zéro du joystick, inversion Disco et placement des commandes en portrait/paysage. Le tactile multipoint est simulé dans les tests d’événements ; aucun téléphone physique n’a été testé.
 - Limite : le navigateur fourni désactive WebGL. Le rendu 3D complet n’a donc pas pu être vérifié visuellement ; le banc de test vérifie les commandes, pas le rendu.
 - Vingt simulations avec uniquement des bots se terminent : quinze victoires du maître, cinq manches avec des survivants. Cet échantillon ne remplace pas une validation de difficulté avec des joueurs humains.
+
+### Lisibilité de la piscine et boost Disco — 11 septembre 2026
+
+Le Game Master se tient désormais en bas de la piscine, à côté de la fronde pour rester visible malgré les commandes. Le départ de la balle est sur ce même bord. Tirer davantage vers le bas envoie la balle plus loin dans la piscine ; tirer à droite envoie à gauche et inversement. Les bots emploient la même nouvelle correspondance.
+
+Le clignotement bleu venait du dessus des pièces presque confondu avec la surface de l’eau, que l’oscillation traversait. Les pièces sont maintenant des volumes biseautés de 0,8 unité d’épaisseur totale, avec des flancs plus foncés et un dessus entre 0,58 et 0,62 au-dessus de l’eau. Les avatars sont surélevés pour poser les pieds dessus. La disparition d’une pièce suit le temps du match, indépendamment du nombre d’images affichées.
+
+Dans Disco, le boost ajoute 0,04 radian/seconde à la rotation pendant 2,6 secondes sans augmenter la vitesse de course. À contre-sens, un joueur dérive donc de moins d’une unité sur la tranche pendant le boost complet. La recharge est de 5 secondes et une inversion après chaque boost est obligatoire avant le suivant ; cette règle s’applique aussi aux bots et au deuxième joueur local. L’interface indique « INVERSE D’ABORD » quand il manque l’inversion.
+
+Les 31 tests vérifient les événements souris/tactiles existants, les tirs et projections avec les caméras PC/portrait/paysage, les vrais volumes Three.js par lancer de rayons sur toutes les cases pendant toute la période d’oscillation, ainsi que la dérive et les blocages du boost. Le rendu WebGL complet reste non vérifié visuellement dans cet environnement.

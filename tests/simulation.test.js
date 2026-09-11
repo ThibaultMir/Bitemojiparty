@@ -20,7 +20,7 @@ test('infection takes sustained contact, propagates, and respects walls',()=>{
  const n=new Match({game:'zombie',master:7,humans:8});n.obstacles=[{x:0,z:0,w:.2,d:4}];n.players[0].x=-.5;n.players[0].z=0;n.players[7].x=.5;n.players[7].z=0;for(let i=0;i<90;i++)n.step(1/60);assert.equal(n.players[0].infected,false);
 });
 test('pool attacks sink the targeted platform and eliminate grounded players',()=>{
- const m=new Match({game:'pool',master:7,humans:8});const p=m.players[0];m.launchPool(7,{id:1,x:-p.x/10.5,y:(p.z+9)/18});for(let i=0;i<80;i++)m.step(1/60);assert.equal(p.alive,false);assert.ok(m.tiles.some(t=>!t.alive));
+ const m=new Match({game:'pool',master:7,humans:8});const p=m.players[0];m.launchPool(7,{id:1,x:-p.x/10.5,y:(9-p.z)/18});for(let i=0;i<80;i++)m.step(1/60);assert.equal(p.alive,false);assert.ok(m.tiles.some(t=>!t.alive));
 });
 test('all minigames terminate, assign exactly one master, and return bounded scores',()=>{
  for(const game of Object.keys(GAMES))for(let seed=1;seed<=4;seed++){
@@ -50,9 +50,9 @@ test('breaking zombie contact reduces infection and conversion enables the new h
 });
 
 test('pool projectile launches at the slingshot and lands on its announced tile',()=>{
- const h={x:7,z:4,age:0,delay:1.05};assert.deepEqual(poolShotPosition(h),{x:0,y:2.4,z:-11.8});
- const mid=poolShotPosition({...h,age:.525});assert.ok(mid.y>5);assert.ok(mid.z>-11.8&&mid.z<4);
- const end=poolShotPosition({...h,age:1.05});assert.ok(Math.abs(end.x-7)<1e-10&&Math.abs(end.z-4)<1e-10&&Math.abs(end.y-.35)<1e-10);
+ const h={x:7,z:4,age:0,delay:1.05};assert.deepEqual(poolShotPosition(h),{x:0,y:2.4,z:POOL.launcherZ});
+ const mid=poolShotPosition({...h,age:.525});assert.ok(mid.y>5);assert.ok(mid.z<POOL.launcherZ&&mid.z>4);
+ const end=poolShotPosition({...h,age:1.05});assert.ok(Math.abs(end.x-7)<1e-10&&Math.abs(end.z-4)<1e-10&&Math.abs(end.y-(POOL.surfaceY+.35))<1e-10);
 });
 test('mechanical kick hits on extension, not on warning or retraction; jumping avoids it',()=>{
  const prepare=()=>{const m=new Match({game:'kick',master:7,humans:8});m.players.forEach((p,i)=>{p.x=6;p.z=-7+i*2;});m.players[0].x=0;m.players[0].z=0;m.attack({x:0});return m;};
@@ -71,11 +71,11 @@ test('spin spawns seven runners on the wide vertical rim with a separate master'
  for(const p of runners){assert.ok(Math.abs(Math.hypot(p.x,p.y-SPIN.centerY)-SPIN.radius)<1e-10);assert.ok(Math.abs(p.z)<SPIN.width/2);}
  assert.ok(Math.abs(m.players[0].z)>SPIN.width/2);
 });
-test('opposing movement holds world position in either direction, even during a boost',()=>{
+test('opposing movement holds world position in either direction without a boost',()=>{
  for(const direction of [-1,1]){
   const m=new Match({game:'spin',master:7,humans:8});m.direction=direction;
   const before=m.players.slice(0,7).map(p=>({x:p.x,y:p.y,z:p.z}));
-  advance(m,3,spinInputs(m,-direction,{action:true}));
+  advance(m,3,spinInputs(m,-direction));
   assert.ok(Math.sign(m.angle)===direction);
   m.players.slice(0,7).forEach((p,i)=>{assert.ok(p.alive);assert.deepEqual({x:p.x,y:p.y,z:p.z},before[i]);});
  }
@@ -113,7 +113,7 @@ test('spin touch input is directional, ignores depth and jumping, and bots must 
  advance(bots,.3,{});assert.equal(b.brain.x,1);assert.ok(b.alive);
 });
 
-const shotAt=(point,id=1)=>({id,x:-point.x/10.5,y:(point.z+9)/18});
+const shotAt=(point,id=1)=>({id,x:-point.x/10.5,y:(9-point.z)/18});
 test('pool is tiled by ten connected 2–5 cell pieces with exact seamless outlines',()=>{
  const {tiles,pieces}=makePool();assert.equal(tiles.length,36);assert.equal(pieces.length,10);
  assert.equal(new Set(tiles.map(t=>`${t.gx},${t.gz}`)).size,36);
@@ -167,4 +167,37 @@ test('jumping avoids immediate drowning, but holding jump cannot hover over a mi
  m.action(p);m.step(1/60);piece.cells.forEach(t=>t.alive=false);piece.alive=false;
  m.step(1/60);assert.ok(p.alive);
  advance(m,2,{0:{action:true}});assert.equal(p.alive,false);
+});
+
+test('boost gently carries opposing runners in both directions and ends without residual drift',()=>{
+ for(const direction of [-1,1])for(const master of [0,7]){
+  const m=new Match({game:'spin',master,humans:8});m.direction=direction;
+  const runner=m.players[master===0?1:0],start=runner.rimAngle;
+  m.action(m.players[master]);assert.equal(m.players[master].cooldown,5);
+  advance(m,1,spinInputs(m,-direction));
+  const drift=(runner.rimAngle-start)*direction;
+  assert.ok(Math.abs(drift-SPIN.boostSpeed)<1e-9);
+  assert.ok(drift>0&&drift<.05,'drift must remain very slight');
+  advance(m,2,spinInputs(m,-direction));assert.ok(runner.alive);
+  assert.ok(Math.abs(runner.rimAngle-start)<.11,'a whole boost moves less than one world unit along the rim');
+  const end=runner.rimAngle;advance(m,.5,spinInputs(m,-direction));assert.equal(runner.rimAngle,end);
+ }
+});
+test('boost requires both five seconds and a new reversal, for either local master',()=>{
+ for(const master of [0,1,7]){
+  const m=new Match({game:'spin',master,humans:8}),gm=m.players[master];
+  m.action(gm);assert.equal(m.boostNeedsReverse,true);
+  advance(m,5.1,spinInputs(m,-1,{action:true}));
+  assert.equal(m.events.filter(e=>e.type==='boost').length,1,'held action cannot repeat without reversal');
+  m.reverseSpin();assert.equal(m.boostNeedsReverse,false);
+  m.action(gm);assert.equal(m.events.filter(e=>e.type==='boost').length,2);
+  m.reverseSpin();m.action(gm);assert.equal(m.events.filter(e=>e.type==='boost').length,2,'reversal must not clear cooldown');
+  advance(m,4.9,spinInputs(m,-1,{action:true}));assert.equal(m.events.filter(e=>e.type==='boost').length,2);
+  advance(m,.2,spinInputs(m,-1,{action:true}));assert.equal(m.events.filter(e=>e.type==='boost').length,3);
+  assert.equal(m.boostNeedsReverse,true);
+ }
+});
+test('a reversal before the first boost cannot authorize a second boost',()=>{
+ const m=new Match({game:'spin',master:0,humans:8});m.reverseSpin();m.action(m.players[0]);
+ advance(m,5.1,spinInputs(m,1,{action:true}));assert.equal(m.events.filter(e=>e.type==='boost').length,1);
 });
