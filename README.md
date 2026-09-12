@@ -4,10 +4,13 @@ Recréation jouable des quatre mini-jeux de lancement de Bitmoji Party, basée s
 
 ## Jouer
 
-Servir le dossier `dist` avec un serveur HTTP statique, par exemple `python3 -m http.server 8000 --directory dist`, puis ouvrir `http://localhost:8000`. Le jeu demande WebGL 2 et JavaScript ; les modules ES doivent être servis en HTTP, pas en `file://`.
+**En ligne (serveur Node.js 24)** : `npm ci --omit=dev`, puis `npm start` et ouvrir `http://localhost:3000`. Le serveur sert à la fois le jeu et les rooms WebSocket, avec sauvegarde SQLite. Les joueurs n’ont rien à installer et aucun compte à créer. Voir [le déploiement HTTPS et le protocole](docs/multiplayer.md).
 
-Aucune installation de dépendance ni compilation n'est nécessaire. Three.js 0.180.0 est livré localement avec sa licence MIT. Aucun CDN, compte, serveur de matchmaking ou service externe n'est requis à l'exécution.
+**Solo / duo local uniquement** : servir le dossier `dist` avec un serveur HTTP statique, par exemple `python3 -m http.server 8000 --directory dist`, puis ouvrir `http://localhost:8000`. Le jeu demande WebGL 2 et JavaScript ; les modules ES doivent être servis en HTTP, pas en `file://`.
 
+Le mode local statique ne nécessite aucune installation de dépendance ni compilation. Three.js 0.180.0 est livré localement avec sa licence MIT. Aucun CDN ni compte joueur n’est requis. Le mode en ligne nécessite le serveur persistant décrit ci-dessus.
+
+- **Rooms en ligne** : code à six chiffres et lien direct, huit places complétées par des bots, lancement réservé au créateur, quatre jeux synchronisés et reconnexion automatique.
 - **Solo** : un joueur et sept bots.
 - **À deux** : deux joueurs sur le même clavier et six bots ; écran partagé dans le manoir.
 - **Party complète** : les quatre jeux dans un ordre aléatoire, intermissions dans le lobby et classement cumulé.
@@ -27,7 +30,7 @@ Aucune installation de dépendance ni compilation n'est nécessaire. Three.js 0.
 | Danse | E | — | Bouton sourire |
 | Pause | Échap ou P | — | Bouton pause |
 
-Dans Pool Party, le Game Master attrape la balle jaune en bas de l’écran, tire vers le bas puis relâche. La traction horizontale envoie la balle du côté opposé ; la traction verticale règle la portée. Il n’y a ni cible ni trajectoire de visée et les touches d’action ne tirent pas. Kick Off utilise uniquement Sauter pour les joueurs et trois boutons En bas / En haut / Lent pour le maître. Les commandes sont rappelées avant chaque manche. La partie se met en pause quand la fenêtre perd le focus ou que l'onglet est masqué.
+Dans Pool Party, le Game Master attrape la balle jaune en bas de l’écran, tire vers le bas puis relâche. La traction horizontale envoie la balle du côté opposé ; la traction verticale règle la portée. Il n’y a ni cible ni trajectoire de visée et les touches d’action ne tirent pas. Kick Off utilise uniquement Sauter pour les joueurs et trois boutons En bas / En haut / Lent pour le maître. Les commandes sont rappelées avant chaque manche. En local, la partie se met en pause quand la fenêtre perd le focus. En ligne, elle continue : un bot assure le relais temporaire et le joueur retrouve son personnage à son retour.
 
 ## Règles implémentées
 
@@ -38,7 +41,7 @@ Dans Pool Party, le Game Master attrape la balle jaune en bas de l’écran, tir
 | Kick Off | 30 s | Sauter au bon moment en bas/lent, rester au sol en haut | Choisir En bas / En haut / Lent ; un tour complet puis repos |
 | Spin Session (Disco) | 30 s | Courir gauche/droite à contre-sens sur la tranche d’une roue verticale | Inverser le disque et déclencher une accélération temporaire |
 
-Un Game Master est attribué à chaque manche. Dans une party, le maître est tiré au sort parmi les huit avatars à chaque manche ; les répétitions sont possibles. Les places restantes sont jouées par les bots. Un survivant ou un Game Master victorieux gagne 100 points ; les autres reçoivent des points de survie ou d'élimination. Les scores s'additionnent pendant la party.
+Un Game Master est attribué à chaque manche. En ligne, avec un à trois humains, chaque humain a un poids 2 et chaque bot un poids 1 ; à partir de quatre humains, le maître est tiré uniformément parmi les humains. Les places humaines réservées pendant une coupure conservent leur poids. Le tirage est renouvelé à chaque manche ; les répétitions sont possibles. En local, les huit avatars ont le même poids. Les places restantes sont jouées par les bots. Un survivant ou un Game Master victorieux gagne 100 points ; les autres reçoivent des points de survie ou d'élimination. Les scores s'additionnent pendant la party.
 
 ## Manoir demandé
 
@@ -63,7 +66,7 @@ Un Game Master est attribué à chaque manche. Dans une party, le maître est ti
 
 Exécuter `npm test` (Node.js, aucune dépendance de test supplémentaire). Les tests couvrent notamment le facteur de surface, l'accès à toutes les zones, les collisions, l'infection sans traversée de murs, la destruction des plateformes, les commandes locales et la terminaison des quatre mini-jeux.
 
-Les sources JavaScript et les références aux fichiers locaux ont également été vérifiées. Aucune validation visuelle automatisée dans un navigateur n'a été exécutée pendant cette livraison. Les performances et l'ergonomie sont à confirmer sur les appareils cibles.
+Les sources JavaScript et les références aux fichiers locaux ont également été vérifiées. Le rapport de la passe multijoueur, ses simulations et ses limites sont dans [docs/multiplayer-validation.md](docs/multiplayer-validation.md). Les performances et l’ergonomie restent à confirmer sur les appareils cibles.
 
 ## Recherche et corrections
 
@@ -71,7 +74,7 @@ Voir [le dossier par mini-jeu](docs/minigames-research.md) pour les sources, ima
 
 ## Périmètre et références
 
-Cette version restitue la boucle de jeu et les quatre modes de lancement. **Elle n'implémente pas de parties en ligne**, de chat vocal, d'authentification Snapchat ou d'import Bitmoji. Le multijoueur disponible est local sur le même clavier. Le rythme de 30 secondes et l’infection progressive sont inspirés de l’interview de Snap ; les valeurs fines, animations, carte agrandie et équilibrage restent des adaptations.
+Cette version restitue la boucle de jeu et les quatre modes de lancement. Le multijoueur en ligne est implémenté par le serveur Node.js ; servir `dist` seul permet uniquement de jouer en local. Aucun chat vocal, authentification Snapchat ou import Bitmoji n’est inclus. Le rythme de 30 secondes et l’infection progressive sont inspirés de l’interview de Snap ; les valeurs fines, animations, carte agrandie et équilibrage restent des adaptations.
 
 - [Snap — annonce officielle et quatre mini-jeux](https://newsroom.snap.com/introducing-snap-games?lang=fr-FR)
 - [Layton Hawkes — structure asymétrique, lobby et intermission](https://www.laytonhawkes.com/bitmoji-party)

@@ -139,10 +139,10 @@ export class Navigation {
  }
 }
 export class Match {
- constructor({game='pool',master=7,humans=1,names=NAMES,colors=COLORS,random=Math.random}={}) {
-  this.game=game;this.config=GAMES[game];this.master=master;this.humans=humans;this.random=random;this.time=0;this.done=false;this.events=[];this.hazards=[];this.nextAttack=1.6;this.angle=0;this.direction=1;this.boost=0;this.spinSpeed=.8;this.target={x:0,z:0};
+ constructor({game='pool',master=7,humans=1,humanIds=null,names=NAMES,colors=COLORS,random=Math.random}={}) {
+  this.game=game;this.config=GAMES[game];this.master=master;this.humans=humans;this.humanIds=humanIds;this.random=random;this.time=0;this.done=false;this.events=[];this.hazards=[];this.nextAttack=1.6;this.angle=0;this.direction=1;this.boost=0;this.spinSpeed=.8;this.target={x:0,z:0};
   this.obstacles=game==='zombie'?makeMansion():[];this.nav=game==='zombie'?new Navigation(this.obstacles):null;
-  Object.assign(this,makePool());this.lastPoolShot=0;
+  Object.assign(this,makePool());this.lastPoolShot=0;this.attackSequence=0;
   this.players=Array.from({length:8},(_,i)=>({id:i,name:names[i],color:colors[i],x:Math.cos(i/8*Math.PI*2)*4.5,z:Math.sin(i/8*Math.PI*2)*4.5,angle:0,jump:0,jumpV:0,alive:true,infected:game==='zombie'&&i===master,infection:0,cooldown:0,dash:0,vx:0,vz:0,walk:0,survived:0,outAt:null,botAt:0,brain:{x:0,z:0},path:[],input:{},emote:0}));
   if(game==='zombie') {const spots=[[-11,-17],[11,18],[-3,4],[11,-17],[-11,17],[3,-4],[-11,4],[11,-4]];this.players.forEach((p,i)=>{[p.x,p.z]=spots[i];});}
   if(game==='pool')this.players.forEach((p,i)=>{const t=this.tiles[[8,10,14,16,20,22,26,28][i]];p.x=t.x;p.z=t.z;p.y=POOL.surfaceY;});
@@ -158,6 +158,7 @@ export class Match {
   if(game==='pool'){Object.assign(this.players[master],{x:3.6,z:POOL.launcherZ+.8,y:0,angle:Math.PI});}
   if(game==='spin'){this.players[master].z=-6;this.players[master].y=4;}
  }
+ isHuman(id){return this.humanIds?this.humanIds.includes(id):id<this.humans;}
  event(type,p,extra={}) {this.events.push({type,id:p?.id,...extra});}
  reverseSpin() {if(this.game!=='spin'||this.done)return;this.direction*=-1;this.boostNeedsReverse=false;this.event('reverse',this.players[this.master]);}
  eliminate(p) {if(!p.alive)return;p.alive=false;p.outAt=this.time;p.jumpV=5;this.event('out',p);}
@@ -174,7 +175,7 @@ export class Match {
   const p=this.players[this.master];
   if(this.game!=='kick'||this.done||playerId!==this.master||!p.alive||p.cooldown>0||this.hazards.some(h=>h.type==='boot')||!['low','high','slow'].includes(mode))return false;
   p.cooldown=kickDuration(mode)+KICK.rest;
-  this.hazards.push({type:'boot',mode,age:0});
+  this.hazards.push({type:'boot',uid:'boot:'+ ++this.attackSequence,mode,age:0});
   this.event('attack',p,{mode});return true;
  }
  launchPool(playerId,shot) {
@@ -183,7 +184,7 @@ export class Match {
   const p=this.players[playerId],aim=poolAim(shot);
   if(!aim||!p.alive||p.cooldown>0)return false;
   p.cooldown=POOL.cooldown;
-  this.hazards.push({type:'splash',...aim,age:0,delay:POOL.flight,hit:false,piece:null});
+  this.hazards.push({type:'splash',uid:'splash:'+shot.id,...aim,age:0,delay:POOL.flight,hit:false,piece:null});
   this.event('attack',p);return true;
  }
  bot(p,dt) {
@@ -257,7 +258,7 @@ export class Match {
   if(this.game==='spin') {
    // Resolve the master first so all runners see the same wheel motion this tick.
    const gm=this.players[this.master];gm.cooldown=Math.max(0,gm.cooldown-dt);gm.survived=this.time;
-   const input=gm.id<this.humans?(inputs[gm.id]||{}):this.bot(gm,dt);
+   const input=this.isHuman(gm.id)?(inputs[gm.id]||{}):this.bot(gm,dt);
    if(input.action)this.action(gm);
    if(input.reverse&&gm.reverseReady!==false){this.reverseSpin();gm.reverseReady=false;}
    else if(!input.reverse)gm.reverseReady=true;
@@ -269,7 +270,7 @@ export class Match {
    p.cooldown=Math.max(0,p.cooldown-dt);p.dash=Math.max(0,p.dash-dt);p.emote=Math.max(0,p.emote-dt);
    if(!p.alive){p.jumpV-=16*dt;p.jump+=p.jumpV*dt;p.x+=p.vx*dt;p.z+=p.vz*dt;continue;}
    p.survived=this.time;p.previousJump=p.jump;
-   const input=p.id<this.humans?(inputs[p.id]||{x:0,z:0}):this.bot(p,dt);
+   const input=this.isHuman(p.id)?(inputs[p.id]||{x:0,z:0}):this.bot(p,dt);
    if(input.shot)this.launchPool(p.id,input.shot);
    if(this.game==='kick'){
     if(p.id===this.master){if(input.kick&&!p.kickHeld)this.attack(input.kick,p.id);p.kickHeld=!!input.kick;}
