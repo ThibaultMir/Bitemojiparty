@@ -223,7 +223,7 @@ export class World {
    for(const x of [-1.8,1.8]){const s=speaker(g,x,-6);s.position.y=4;s.scale.setScalar(.6);}
    this.spinSign=textSprite('', '#fff593',.9);this.spinSign.position.set(0,-6,4.3);g.add(this.spinSign);
   }
-  roster.forEach((r,i)=>this.avatars.push(new Avatar(this.characters,i,r.color,r.name,i===0?skin:i%6,i===0?hair:i%4)));
+  roster.forEach((r,i)=>this.avatars.push(new Avatar(this.characters,i,r.color,r.name,r.skin??(i===0?skin:i%6),r.hair??(i===0?hair:i%4))));
   if(game==='kick')this.avatars.forEach((a,i)=>{if(i!==match.master){a.kickHeart=textSprite('♥','#ff8dd8',.6);a.kickHeart.position.set(0,3.95,0);a.root.add(a.kickHeart);}});
   this.cursor=torus(this.dynamic,'#fff5a6',0,.5,0,.8,.08);this.cursor.visible=false;
   this.follow.set(match?.players[0].x||0,0,match?.players[0].z||0);

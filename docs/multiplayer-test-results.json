@@ -1,0 +1,33 @@
+{
+  "date": "2026-09-12",
+  "node": "24.19.0",
+  "unit_and_transport": {
+    "passed": 65,
+    "failed": 0
+  },
+  "simulation": {
+    "seed": 20260912,
+    "convergence": 64,
+    "faultRounds": 32,
+    "parties": 8,
+    "packets": 50600,
+    "duplicates": 10368,
+    "dropped": 7062,
+    "late": 4979,
+    "disconnects": 28,
+    "restarts": 32,
+    "ticks": 164785,
+    "elapsedSeconds": 21.41
+  },
+  "load": {
+    "rooms": 8,
+    "clients": 64,
+    "simulationSeconds": 4,
+    "messages": 5384,
+    "bytes": 22897129,
+    "tickP95ms": 3.44,
+    "maxTickMs": 5.23,
+    "rssMB": 137,
+    "errors": 0
+  }
+}
