@@ -55,7 +55,7 @@ export function partySchedule(random=Math.random) {
 export const GAMES = {
  pool: {name:'Pool Party', icon:'🌊', color:'#51d5ed', duration:30, subtitle:'Garde les pieds au sec.', runner:'Surveille la balle et saute entre les pièces. Une pièce touchée coule en entier !', master:'Tire la balle vers le bas puis relâche. Plus tu tires, plus elle va loin ; tire du côté opposé pour diriger le tir. Recharge : 2,4 s.', action:'Sauter', masterAction:'Lancer'},
  zombie: {name:'Zombie Escape', icon:'👻', color:'#b1ee75', duration:60, subtitle:'Bienvenue au manoir des trouillards.', runner:'Fuis les zombies jusqu’à la fin. Le sprint peut te sauver !', master:'Reste 2 secondes près d’un humain pour l’infecter. Il rejoint ton équipe.', action:'Sprinter', masterAction:'Sprinter'},
- kick: {name:'Kick Off', icon:'👟', color:'#ffa96c', duration:30, subtitle:'Attention à la pointure 300.', runner:'Évite la zone rouge. Saute la botte et reste sur le terrain.', master:'Aligne la jambe mécanique, puis déclenche un coup de pied.', action:'Sauter', masterAction:'Shooter'},
+ kick: {name:'Kick Off', icon:'👟', color:'#ffa96c', duration:30, subtitle:'Attention à la pointure 300.', runner:'Un seul bouton : sauter. Saute par-dessus le crampon bas ; reste au sol quand il passe en haut. Attention au tour lent : attends le bon moment !', master:'En bas : tour rapide au sol. En haut : même tour au-dessus des têtes. Lent : tour lent au sol pour piéger les sauts précoces.', action:'Sauter', masterAction:'Shooter'},
  spin: {name:'Spin Session', icon:'🌀', color:'#d4a7ff', duration:30, subtitle:'Disco : garde le cap sur la roue !', runner:'Sur la tranche de la roue, maintiens gauche ou droite à contre-sens. Change vite quand le Game Master inverse ! Le boost t’entraîne légèrement, même à contre-sens.', master:'Inverse le sens de la roue pour piéger les joueurs. Le boost entraîne légèrement les joueurs malgré leur course à contre-sens. Recharge : 5 s. Tu dois inverser entre deux boosts.', action:'Courir', masterAction:'Accélérer'}
 };
 export const COLORS = ['#ffca48','#55d6cf','#f78bc1','#8c94ff','#fd926d','#a0dc79','#c690eb','#f56f80'];
@@ -68,11 +68,30 @@ export function poolShotPosition(h) {
  const u=clamp(h.age/h.delay,0,1);
  return {x:h.x*u,y:2.4*(1-u)+(POOL.surfaceY+.35)*u+20*u*(1-u),z:POOL.launcherZ+(h.z-POOL.launcherZ)*u};
 }
-// A mounted leg winds up, extends, then retracts; it is not a free-flying projectile.
+// Shared by collision detection and the rendered cleat. One clockwise revolution.
+export const KICK = {radius:6, fast:1.5, slow:3, windup:.25, recovery:.35, rest:.3,
+ halfWidth:.85, inner:2.5, outer:7.3, lowBottom:.08, lowTop:1.05, highBottom:3.15, bodyHeight:2.65, playerRadius:.3};
 export function kickPose(h) {
- const t=h.age-h.delay;
- const extension=t<0?0:t<.48?t/.48:t<.95?1-(t-.48)/.47:0;
- return {z:-11+20*clamp(extension,0,1),striking:t>=0&&t<.48};
+ if(!h)return {angle:0,y:0,striking:false};
+ const duration=h.mode==='slow'?KICK.slow:KICK.fast, t=h.age-KICK.windup;
+ const progress=clamp(t/duration,0,1);
+ const lift=h.mode==='high'?KICK.highBottom-KICK.lowBottom:0;
+ const y=t<0?lift*clamp(h.age/KICK.windup,0,1):t>duration?lift*(1-clamp((t-duration)/KICK.recovery,0,1)):lift;
+ return {angle:progress*Math.PI*2,y,striking:t>=0&&t<duration};
+}
+export function kickDuration(mode) {return KICK.windup+(mode==='slow'?KICK.slow:KICK.fast)+KICK.recovery;}
+// Sample the swept shoe and interpolated jump, avoiding frame-rate-dependent misses.
+export function kickHits(h,p,previousJump,dt) {
+ const steps=Math.max(1,Math.ceil(dt/.004));
+ for(let i=0;i<=steps;i++){
+  const u=i/steps,pose=kickPose({...h,age:h.age-dt+dt*u});if(!pose.striking)continue;
+  const radial=p.x*Math.sin(pose.angle)+p.z*Math.cos(pose.angle);
+  const lateral=p.x*Math.cos(pose.angle)-p.z*Math.sin(pose.angle);
+  if(radial<KICK.inner-KICK.playerRadius||radial>KICK.outer+KICK.playerRadius||Math.abs(lateral)>KICK.halfWidth+KICK.playerRadius)continue;
+  const jump=previousJump+(p.jump-previousJump)*u;
+  if(jump<KICK.lowTop+pose.y&&jump+KICK.bodyHeight>KICK.lowBottom+pose.y)return true;
+ }
+ return false;
 }
 export function makeMansion() {
  const items=[];
@@ -127,6 +146,7 @@ export class Match {
   this.players=Array.from({length:8},(_,i)=>({id:i,name:names[i],color:colors[i],x:Math.cos(i/8*Math.PI*2)*4.5,z:Math.sin(i/8*Math.PI*2)*4.5,angle:0,jump:0,jumpV:0,alive:true,infected:game==='zombie'&&i===master,infection:0,cooldown:0,dash:0,vx:0,vz:0,walk:0,survived:0,outAt:null,botAt:0,brain:{x:0,z:0},path:[],input:{},emote:0}));
   if(game==='zombie') {const spots=[[-11,-17],[11,18],[-3,4],[11,-17],[-11,17],[3,-4],[-11,4],[11,-4]];this.players.forEach((p,i)=>{[p.x,p.z]=spots[i];});}
   if(game==='pool')this.players.forEach((p,i)=>{const t=this.tiles[[8,10,14,16,20,22,26,28][i]];p.x=t.x;p.z=t.z;p.y=POOL.surfaceY;});
+  if(game==='kick')this.players.filter(p=>p.id!==master).forEach((p,i)=>{p.kickAngle=2.08+i*(Math.PI*2-4.16)/6;p.x=Math.sin(p.kickAngle)*KICK.radius;p.z=Math.cos(p.kickAngle)*KICK.radius;});
   if(game==='spin') {
    this.spinSpeed=.42;this.boostNeedsReverse=false;
    this.players.filter(p=>p.id!==master).forEach((p,i)=>{
@@ -146,15 +166,16 @@ export class Match {
   if(this.game==='zombie'){p.dash=.48;p.cooldown=3.3;this.event('dash',p);return;}
   if(p.id===this.master) {
    if(this.game==='spin'&&!this.boostNeedsReverse){this.boost=SPIN.boostDuration;p.cooldown=SPIN.boostCooldown;this.boostNeedsReverse=true;this.event('boost',p);}
-   else if(this.game==='kick'){this.attack(this.target);p.cooldown=1.55;}
    return;
   }
   if(this.game!=='spin'&&p.jump<.01){p.jumpV=7.6;p.cooldown=.82;this.event('jump',p);}
  }
- attack(target) {
-  if(this.game!=='kick')return;
-  this.hazards.push({type:'boot',x:clamp(target.x,-7.3,7.3),z:-11,age:0,delay:.85,hit:false});
-  this.event('attack',this.players[this.master]);
+ attack(mode,playerId=this.master) {
+  const p=this.players[this.master];
+  if(this.game!=='kick'||this.done||playerId!==this.master||!p.alive||p.cooldown>0||this.hazards.some(h=>h.type==='boot')||!['low','high','slow'].includes(mode))return false;
+  p.cooldown=kickDuration(mode)+KICK.rest;
+  this.hazards.push({type:'boot',mode,age:0});
+  this.event('attack',p,{mode});return true;
  }
  launchPool(playerId,shot) {
   if(this.game!=='pool'||this.done||playerId!==this.master||!Number.isSafeInteger(shot?.id)||shot.id<=this.lastPoolShot)return false;
@@ -172,11 +193,22 @@ export class Match {
     const targets=this.players.filter(q=>q.alive&&q.id!==this.master);const t=targets[Math.floor(r()*targets.length)];
     if(t){
      if(this.game==='pool')this.launchPool(p.id,{id:this.lastPoolShot+1,x:-(t.x+(r()-.5)*2)/10.5,y:(9-t.z+(r()-.5)*2)/18});
+     else if(this.game==='kick')this.attack(['low','high','slow'][Math.floor(r()*3)]);
      else {this.target={x:t.x+(r()-.5)*2,z:t.z};this.action(p);}
     }
     if(this.game==='spin'&&r()<.65)this.reverseSpin();
     this.nextAttack=this.time+(this.game==='pool'?POOL.cooldown+.15:this.game==='kick'?1.9:4)+r()*.8;
    }
+   return {x:0,z:0};
+  }
+  if(this.game==='kick'){
+   const h=this.hazards.find(h=>h.type==='boot');
+   if(h&&p.kickThreat!==h){
+    p.kickThreat=h;
+    const arrival=KICK.windup+p.kickAngle/(Math.PI*2)*(h.mode==='slow'?KICK.slow:KICK.fast);
+    p.kickJumpAt=h.mode==='high'?(r()<.22?arrival-.34:Infinity):r()<.18?.3:arrival-.37+(r()-.5)*.18;
+   }
+   if(h&&h.age>=p.kickJumpAt){this.action(p);p.kickJumpAt=Infinity;}
    return {x:0,z:0};
   }
   p.botAt-=dt;
@@ -206,10 +238,6 @@ export class Match {
      if(safe[0])p.brain={x:safe[0].x,z:safe[0].z};
      if((danger||!current)&&r()<.8)this.action(p);
     }else p.brain={x:p.x,z:p.z};
-   } else if(this.game==='kick') {
-    const threat=this.hazards.find(h=>h.age<2.9&&Math.abs(p.x-h.x)<2);
-    p.brain=threat&&r()>.22?{x:clamp(threat.x+(p.x>threat.x?3.5:-3.5),-8,8),z:p.z}:{x:p.x*.8+(r()-.5),z:p.z*.8};
-    if(threat&&threat.age>threat.delay-.2&&threat.age<threat.delay+.2&&r()<.45)this.action(p);
    } else if(this.game==='spin') {
     // Bots react after their normal delay, rather than reading a reversal instantly.
     p.brain={x:-this.direction,z:0};
@@ -240,11 +268,13 @@ export class Match {
    if(this.game==='spin'&&p.id===this.master)continue;
    p.cooldown=Math.max(0,p.cooldown-dt);p.dash=Math.max(0,p.dash-dt);p.emote=Math.max(0,p.emote-dt);
    if(!p.alive){p.jumpV-=16*dt;p.jump+=p.jumpV*dt;p.x+=p.vx*dt;p.z+=p.vz*dt;continue;}
-   p.survived=this.time;
+   p.survived=this.time;p.previousJump=p.jump;
    const input=p.id<this.humans?(inputs[p.id]||{x:0,z:0}):this.bot(p,dt);
    if(input.shot)this.launchPool(p.id,input.shot);
-   if(input.aim&&p.id===this.master&&this.game==='kick')this.target={x:clamp(input.aim.x,-8,8),z:clamp(input.aim.z,-8,8)};
-   if(input.action)this.action(p);
+   if(this.game==='kick'){
+    if(p.id===this.master){if(input.kick&&!p.kickHeld)this.attack(input.kick,p.id);p.kickHeld=!!input.kick;}
+    else {if(input.action&&!p.actionHeld)this.action(p);p.actionHeld=!!input.action;}
+   }else if(input.action)this.action(p);
    if(this.game==='spin') {
     // Running cancels normal rotation. Boost adds a slight unavoidable drift.
     // A touch stick is directional here: vertical input cannot dilute compensation.
@@ -259,14 +289,8 @@ export class Match {
     }
     continue;
    }
-   if(p.id===this.master&&this.game!=='zombie') {
-    if(p.id<this.humans&&this.game==='kick') {
-     if(input.aim)this.target={x:clamp(input.aim.x,-8,8),z:clamp(input.aim.z,-8,8)};
-     else {this.target.x=clamp(this.target.x+(input.x||0)*10*dt,-8,8);this.target.z=clamp(this.target.z+(input.z||0)*10*dt,-8,8);}
-    }
-    continue;
-   }
-   let dx=input.x||0,dz=input.z||0;const len=Math.hypot(dx,dz);if(len>1){dx/=len;dz/=len;}
+   if(p.id===this.master&&this.game!=='zombie')continue;
+   let dx=this.game==='kick'?0:input.x||0,dz=this.game==='kick'?0:input.z||0;const len=Math.hypot(dx,dz);if(len>1){dx/=len;dz/=len;}
    const speed=(this.game==='zombie'?(p.infected?4.9:4.6):5.6)*(p.dash>0?1.9:1);
    if(p.jump>0||p.jumpV>0){p.jumpV-=19*dt;p.jump+=p.jumpV*dt;if(p.jump<=0){p.jump=0;p.jumpV=0;}}
    let vx=dx*speed+p.vx,vz=dz*speed+p.vz;p.vx*=Math.exp(-4.2*dt);p.vz*=Math.exp(-4.2*dt);
@@ -278,7 +302,7 @@ export class Match {
    }
    if(this.game==='kick'&&(Math.abs(p.x)>9||Math.abs(p.z)>9))this.eliminate(p);
   }
-  if(this.game!=='zombie'&&this.game!=='spin') {
+  if(this.game==='pool') {
    const runners=this.players.filter(p=>p.alive&&p.id!==this.master);
    for(let a=0;a<runners.length;a++)for(let b=a+1;b<runners.length;b++){const p=runners[a],q=runners[b],d=distance(p,q);if(d<.8&&Math.abs(p.jump-q.jump)<.7){const x=(p.x-q.x)/(d||1),z=(p.z-q.z)/(d||1),push=(.8-d)*.5;p.x+=x*push;p.z+=z*push;q.x-=x*push;q.z-=z*push;}}
   }
@@ -298,11 +322,12 @@ export class Match {
     for(const p of this.players)if(p.alive&&p.id!==this.master&&distance(p,h)<2.3&&p.jump<.6){p.vx=(p.x-h.x||.3)*5;p.vz=(p.z-h.z||.3)*5;}
    }
    if(h.type==='boot') {
-    const previous=kickPose({...h,age:h.age-dt}),pose=kickPose(h);h.z=pose.z;
-    if(pose.striking||previous.striking) for(const p of this.players)if(p.alive&&p.id!==this.master&&Math.abs(p.x-h.x)<1.8&&p.z>=previous.z-1.5&&p.z<=Math.max(pose.z,previous.z)+1.5&&p.jump<.8&&!h['hit'+p.id]){h['hit'+p.id]=true;p.vz=65;p.vx=(p.x-h.x)*4;this.event('bump',p);}
+    for(const p of this.players)if(p.alive&&p.id!==this.master&&kickHits(h,p,p.previousJump??p.jump,dt)){
+     p.vx=Math.cos(p.kickAngle)*13;p.vz=-Math.sin(p.kickAngle)*13;this.event('bump',p);this.eliminate(p);
+    }
    }
   }
-  this.hazards=this.hazards.filter(h=>h.age<(h.type==='boot'?h.delay+.96:3.1));
+  this.hazards=this.hazards.filter(h=>h.age<(h.type==='boot'?kickDuration(h.mode):3.1));
   const survivors=this.players.filter(p=>p.id!==this.master&&p.alive&&(this.game!=='zombie'||!p.infected));
   if(!survivors.length||this.time>=this.config.duration){this.time=Math.min(this.time,this.config.duration);this.done=true;this.masterWon=!survivors.length;this.event('finish');}
  }

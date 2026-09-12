@@ -19,8 +19,8 @@ function setup(overrides={}){
  const controls=bindPointerControls({...elements,getState:()=>game,onShot:s=>shots.push(s),aimAt:(x,y)=>({x,z:y})});
  return {...elements,game,shots,controls};
 }
-test('all four runner modes accept touch movement; joystick and action own separate fingers',()=>{
- for(const mode of ['pool','zombie','kick','spin']){
+test('moving runner modes accept touch movement; joystick and action own separate fingers',()=>{
+ for(const mode of ['pool','zombie','spin']){
   const f=setup({game:mode});f.joystick.send('pointerdown',{clientX:100});
   assert.ok(f.controls.state.virtual.x>.9);
   f.joystick.send('pointerdown',{pointerId:2,clientX:0});assert.ok(f.controls.state.virtual.x>.9,'second finger cannot steal the stick');
@@ -56,14 +56,14 @@ test('cancel, capture loss, pause, round change, resize cleanup and cooldown dis
  }
  const f=setup({master:0,cooldown:1});f.sling.send('pointerdown');f.game.cooldown=0;f.sling.send('pointerup',{clientY:150});assert.equal(f.shots.length,0);
 });
-test('PC aim/fire is restricted to Kick Off master; touch master controls do not hijack desktop inputs',()=>{
+test('canvas aiming is disabled; only zombie masters accept touch movement',()=>{
  for(const game of ['pool','zombie','kick','spin']){
   const f=setup({game,master:0});
   f.canvas.send('pointermove',{pointerType:'mouse',clientX:20,clientY:35});
-  assert.deepEqual(f.controls.state.pointerAim,game==='kick'?{x:20,z:35}:null);
-  f.canvas.send('pointerdown',{pointerType:'mouse'});assert.equal(f.controls.state.actionHeld,game==='kick');f.controls.clear();
+  assert.deepEqual(f.controls.state.pointerAim,null);
+  f.canvas.send('pointerdown',{pointerType:'mouse'});assert.equal(f.controls.state.actionHeld,false);f.controls.clear();
   f.canvas.send('pointerdown',{pointerType:'touch'});assert.equal(f.controls.state.actionHeld,false);
-  f.joystick.send('pointerdown',{clientX:100});assert.equal(f.controls.state.virtual.x>0,['kick','zombie'].includes(game));
+  f.joystick.send('pointerdown',{clientX:100});assert.equal(f.controls.state.virtual.x>0,game==='zombie');
  }
 });
 test('a local J2 pool master uses the mouse while J1 keeps independent movement and jump',()=>{
@@ -81,7 +81,20 @@ test('AZERTY/QWERTY, opposite keys, action keys and independent J2 controls stay
  const opposite=readKeyboardInputs(new Set(['KeyA','KeyD','KeyW','KeyS']),{virtual:{x:1,z:1}});
  assert.equal(opposite[0].x,0);assert.equal(opposite[0].z,0);
  const state={virtual:{x:0,z:0},pointerAim:{x:7,z:4}};
- assert.deepEqual(readKeyboardInputs(new Set(),state,{game:'kick',master:0})[0].aim,state.pointerAim);
+ assert.equal(readKeyboardInputs(new Set(),state,{game:'kick',master:0})[0].aim,undefined);
  assert.equal(readKeyboardInputs(new Set(['KeyD']),state,{game:'kick',master:0})[0].aim,undefined);
  assert.equal(readKeyboardInputs(new Set(),state,{game:'pool',master:0})[0].aim,undefined);
+});
+
+test('Kick runners have only jump and both local masters have three distinct commands',()=>{
+ const f=setup({game:'kick'});f.joystick.send('pointerdown',{clientX:100});assert.equal(f.controls.state.virtual.x,0);
+ f.action.send('pointerdown');assert.ok(f.controls.state.actionHeld);f.action.send('pointercancel');assert.equal(f.controls.state.actionHeld,false);
+ for(const [key,mode] of [['Digit1','low'],['Digit2','high'],['Digit3','slow']]){
+  const input=readKeyboardInputs(new Set([key,'KeyD','Space','Enter']),{}, {game:'kick',master:0});
+  assert.equal(input[0].kick,mode);assert.equal(input[0].x,0);assert.equal(input[1].action,true);
+ }
+ for(const [key,mode] of [['ArrowDown','low'],['ArrowUp','high'],['ArrowRight','slow']]){
+  const input=readKeyboardInputs(new Set([key,'Space']),{}, {game:'kick',master:1});assert.equal(input[1].kick,mode);assert.equal(input[1].z,0);assert.equal(input[0].action,true);
+ }
+ const gm=setup({game:'kick',master:0});gm.action.send('pointerdown');assert.equal(gm.controls.state.actionHeld,false);
 });

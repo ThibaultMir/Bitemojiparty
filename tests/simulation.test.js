@@ -54,13 +54,6 @@ test('pool projectile launches at the slingshot and lands on its announced tile'
  const mid=poolShotPosition({...h,age:.525});assert.ok(mid.y>5);assert.ok(mid.z<POOL.launcherZ&&mid.z>4);
  const end=poolShotPosition({...h,age:1.05});assert.ok(Math.abs(end.x-7)<1e-10&&Math.abs(end.z-4)<1e-10&&Math.abs(end.y-(POOL.surfaceY+.35))<1e-10);
 });
-test('mechanical kick hits on extension, not on warning or retraction; jumping avoids it',()=>{
- const prepare=()=>{const m=new Match({game:'kick',master:7,humans:8});m.players.forEach((p,i)=>{p.x=6;p.z=-7+i*2;});m.players[0].x=0;m.players[0].z=0;m.attack({x:0});return m;};
- const m=prepare();for(let i=0;i<50;i++)m.step(1/60);assert.equal(m.players[0].vz,0);
- for(let i=0;i<26;i++)m.step(1/60);assert.ok(m.hazards[0].hit0);assert.ok(m.players[0].vz>0);
- const n=prepare();for(let i=0;i<90;i++){n.players[0].jump=2;n.players[0].jumpV=0;n.step(1/60);}assert.equal(n.hazards[0].hit0,undefined);
- assert.equal(kickPose({age:1.4,delay:.85}).striking,false);assert.equal(kickPose({age:2,delay:.85}).z,-11);
-});
 const spinInputs=(m,x,masterInput={})=>Object.fromEntries(m.players.map(p=>[p.id,p.id===m.master?masterInput:{x,z:0}]));
 const advance=(m,seconds,inputs)=>{for(let i=0;i<Math.round(seconds*60);i++)m.step(1/60,inputs);};
 

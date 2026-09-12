@@ -27,7 +27,7 @@ Aucune installation de dépendance ni compilation n'est nécessaire. Three.js 0.
 | Danse | E | — | Bouton sourire |
 | Pause | Échap ou P | — | Bouton pause |
 
-Dans Pool Party, le Game Master attrape la balle jaune en bas de l’écran, tire vers le bas puis relâche. La traction horizontale envoie la balle du côté opposé ; la traction verticale règle la portée. Il n’y a ni cible ni trajectoire de visée et les touches d’action ne tirent pas. Kick Off conserve la visée souris et le clic pour frapper. Les commandes sont rappelées avant chaque manche. La partie se met en pause quand la fenêtre perd le focus ou que l'onglet est masqué.
+Dans Pool Party, le Game Master attrape la balle jaune en bas de l’écran, tire vers le bas puis relâche. La traction horizontale envoie la balle du côté opposé ; la traction verticale règle la portée. Il n’y a ni cible ni trajectoire de visée et les touches d’action ne tirent pas. Kick Off utilise uniquement Sauter pour les joueurs et trois boutons En bas / En haut / Lent pour le maître. Les commandes sont rappelées avant chaque manche. La partie se met en pause quand la fenêtre perd le focus ou que l'onglet est masqué.
 
 ## Règles implémentées
 
@@ -35,7 +35,7 @@ Dans Pool Party, le Game Master attrape la balle jaune en bas de l’écran, tir
 | --- | --- | --- | --- |
 | Pool Party | 30 s | Surveiller la balle et sauter entre 10 pièces de 2 à 5 cases | Tirer puis relâcher le lance-pierre ; une pièce touchée coule en entier ; recharge 2,4 s |
 | Zombie Escape | 60 s | Fuir, sprinter, contourner les meubles | Infecter après 2 secondes de proximité ; les infectés rejoignent la chasse |
-| Kick Off | 30 s | Esquiver ou sauter la botte, éviter l'éjection | Aligner la jambe mécanique, frapper puis se rétracter |
+| Kick Off | 30 s | Sauter au bon moment en bas/lent, rester au sol en haut | Choisir En bas / En haut / Lent ; un tour complet puis repos |
 | Spin Session (Disco) | 30 s | Courir gauche/droite à contre-sens sur la tranche d’une roue verticale | Inverser le disque et déclencher une accélération temporaire |
 
 Un Game Master est attribué à chaque manche. Dans une party, le maître est tiré au sort parmi les huit avatars à chaque manche ; les répétitions sont possibles. Les places restantes sont jouées par les bots. Un survivant ou un Game Master victorieux gagne 100 points ; les autres reçoivent des points de survie ou d'élimination. Les scores s'additionnent pendant la party.
@@ -67,7 +67,7 @@ Les sources JavaScript et les références aux fichiers locaux ont également é
 
 ## Recherche et corrections
 
-Voir [le dossier par mini-jeu](docs/minigames-research.md) pour les sources, images, vidéos, différences implémentées et incertitudes. Cette passe remplace la chute verticale de Pool Party par un tir depuis le lance-pierre, la botte volante par une jambe mécanique, allonge l’infection avec une jauge et retire la barre de Spin Session non étayée. Le tirage du Game Master devient aléatoire. Les modes « speed / haut / bas » de Kick Off restent non confirmés.
+Voir [le dossier par mini-jeu](docs/minigames-research.md) pour les sources, images, vidéos, différences implémentées et incertitudes. Cette passe remplace la chute verticale de Pool Party par un tir depuis le lance-pierre, la botte volante par une jambe mécanique, allonge l’infection avec une jauge et retire la barre de Spin Session non étayée. Le tirage du Game Master devient aléatoire. Les anciens modes historiques restent non confirmés par ces sources ; le rework ci-dessous applique le gameplay et la capture fournis par l’utilisateur.
 
 ## Périmètre et références
 
@@ -112,3 +112,20 @@ Le clignotement bleu venait du dessus des pièces presque confondu avec la surfa
 Dans Disco, le boost ajoute 0,04 radian/seconde à la rotation pendant 2,6 secondes sans augmenter la vitesse de course. À contre-sens, un joueur dérive donc de moins d’une unité sur la tranche pendant le boost complet. La recharge est de 5 secondes et une inversion après chaque boost est obligatoire avant le suivant ; cette règle s’applique aussi aux bots et au deuxième joueur local. L’interface indique « INVERSE D’ABORD » quand il manque l’inversion.
 
 Les 31 tests vérifient les événements souris/tactiles existants, les tirs et projections avec les caméras PC/portrait/paysage, les vrais volumes Three.js par lancer de rayons sur toutes les cases pendant toute la période d’oscillation, ainsi que la dérive et les blocages du boost. Le rendu WebGL complet reste non vérifié visuellement dans cet environnement.
+
+
+### Kick Off — rework du 12 septembre 2026
+
+Le mini-jeu suit désormais le gameplay demandé : sept joueurs immobiles sur un arc face à un crampon géant, un seul bouton Sauter, élimination immédiate au contact. Un appui maintenu ne répète ni les sauts ni les attaques. Les bots observent le passage avec une marge d’erreur et le maître bot alterne les trois modes.
+
+| Attaque | Rotation | Réponse du joueur |
+| --- | --- | --- |
+| En bas | Un tour en 1,5 s au niveau des jambes | Sauter au passage |
+| En haut | Montée, puis un tour en 1,5 s au-dessus des têtes | Rester au sol |
+| Lent | Un tour en 3 s au niveau des jambes | Retarder le saut ; sauter au démarrage fait retomber trop tôt |
+
+Chaque attaque comprend 0,25 s de préparation, 0,35 s de retour (descente pour le mode haut) et 0,3 s de repos. Impossible de superposer deux attaques ou de changer de mode pendant un tour. La pose et les collisions partagent le même angle et la même hauteur ; le passage entre deux images est échantillonné pour éviter les traversées.
+
+J1 joueur : Espace ou Sauter. J1 maître : touches 1 / 2 / 3 ou boutons En bas / En haut / Lent. J2 joueur : Entrée ; J2 maître : flèches ↓ / ↑ / → ou les mêmes trois boutons. La visée et le déplacement sont retirés de Kick Off. Les règles sont disponibles dans l’introduction et l’aide.
+
+Voir [la description détaillée de la capture et sa traduction en scène](docs/kick-rework.md). Tests de simulation et contrôles : sauts précoces/tardifs/corrects, passage haut, lenteur, toutes les positions, durée et retour, commandes J2, bots, maintien des touches et blocage des attaques. Tests Three.js sans WebGL : chaussure réelle et cadrage. Aucun essai visuel dans un navigateur ni sur téléphone physique pour cette passe.

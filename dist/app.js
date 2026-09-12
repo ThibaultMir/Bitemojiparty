@@ -5,12 +5,12 @@ const escapeHtml=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 const defaults={name:'Toi',color:0,skin:0,hair:0,coins:0,dances:[0],dance:0,sound:false};
 let prefs={...defaults};try{const saved=JSON.parse(localStorage.getItem('bitemoji-party-v1')||'{}');prefs={...defaults,...saved};prefs.name=String(prefs.name||'Toi').slice(0,16);for(const k of ['color','skin','hair'])prefs[k]=clamp(Number(prefs[k])||0,0,k==='color'?7:k==='skin'?5:3);prefs.coins=Math.max(0,Number(prefs.coins)||0);if(!Array.isArray(prefs.dances))prefs.dances=[0];if(!prefs.dances.includes(prefs.dance))prefs.dance=0;}catch{}
 let world,screen='loading',match=null,humans=1,roster=[],campaign=false,round=0,order=['pool','zombie','kick','spin'],masters=[],totals=Array(8).fill(0),pendingGame='pool',pausedFrom='playing',count=0,danceUntil=0,lobbyPhase=0,toastUntil=0,eventUntil=0,last=0,accumulator=0,hudAt=0,lastSurvivors='',audioContext;
-const keys=new Set();let controls=null,pendingPoolShot=null,shotSequence=0;
+const keys=new Set();let controls=null,pendingPoolShot=null,pendingKick=null,shotSequence=0;
 const touchInput=()=>matchMedia('(any-pointer:coarse)').matches;
 const save=()=>{try{localStorage.setItem('bitemoji-party-v1',JSON.stringify(prefs));}catch{}};
 function setScreen(s){screen=s;document.body.dataset.screen=s;$('lobby').hidden=s!=='lobby';$('topbar').hidden=s!=='lobby';$('hud').hidden=!['playing','countdown','paused'].includes(s);$('countdown').hidden=s!=='countdown';}
 function closeDialogs(){document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
-function clearInputs(){keys.clear();controls?.clear();pendingPoolShot=null;}
+function clearInputs(){keys.clear();controls?.clear();pendingPoolShot=null;pendingKick=null;}
 function toast(t){$('toast').textContent=t;$('toast').classList.add('visible');toastUntil=performance.now()+2800;}
 function eventToast(t){$('event-toast').textContent=t;$('event-toast').classList.add('visible');eventUntil=performance.now()+2300;}
 function sound(freq=440,duration=.10,type='sine',volume=.045){if(!prefs.sound)return;try{audioContext??=new (window.AudioContext||window.webkitAudioContext)();if(audioContext.state==='suspended')audioContext.resume();const o=audioContext.createOscillator(),g=audioContext.createGain();o.type=type;o.frequency.setValueAtTime(freq,audioContext.currentTime);o.frequency.exponentialRampToValueAtTime(freq*.6,audioContext.currentTime+duration);g.gain.setValueAtTime(volume,audioContext.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+duration);o.connect(g);g.connect(audioContext.destination);o.start();o.stop(audioContext.currentTime+duration);}catch{}}
@@ -30,9 +30,15 @@ function spinControls(master,touch=false){
  const gm=(touch?'Inverser : change le sens · Accélérer : piège les joueurs':'<kbd>F</kbd> : inverser · <kbd>Espace</kbd> : accélérer')+boostRule;
  return (master===0?gm:runner)+(humans===2?(master===1?'<br>J2 : <kbd>Maj droite</kbd> inverser · <kbd>Entrée</kbd> accélérer'+boostRule:'<br>J2 : <kbd>←</kbd> / <kbd>→</kbd> à contre-sens'):'');
 }
+function kickControls(master,touch=false){
+ const runner=touch?'Sauter : un appui, un saut. Observe la hauteur et la vitesse du pied.':'<kbd>Espace</kbd> : sauter · Bas / lent : saute au passage · Haut : reste au sol';
+ const gm=touch?'Choisis En bas, En haut ou Lent. Un seul tour par attaque.':'<kbd>1</kbd> En bas · <kbd>2</kbd> En haut · <kbd>3</kbd> Lent';
+ return (master===0?gm:runner)+(humans===2?(master===1?'<br>J2 Game Master : <kbd>↓</kbd> En bas · <kbd>↑</kbd> En haut · <kbd>→</kbd> Lent':'<br>J2 : <kbd>Entrée</kbd> sauter'):'');
+}
 function loadRound(){clearInputs();const game=pendingGame;const gm=campaign?masters[round]:document.querySelector('input[name="practice-role"]:checked').value==='master'?0:7;match=new Match({game,master:gm,humans,names:roster.map(r=>r.name),colors:roster.map(r=>r.color)});world.build(game,roster,match,prefs.skin,prefs.hair);const conf=GAMES[game];$('intro-icon').textContent=conf.icon;$('intro-icon').style.setProperty('--accent',conf.color);$('intro-round').textContent=campaign?`MANCHE ${round+1} SUR 4`:'PARTIE RAPIDE';$('intro-title').textContent=conf.name;$('intro-subtitle').textContent=conf.subtitle;$('intro-role').textContent=gm===0?'★ TU ES LE GAME MASTER':`${roster[gm].name.toUpperCase()} EST LE GAME MASTER`;$('intro-rule').textContent=gm===0?conf.master:conf.runner;
  const touch=touchInput();$('intro-controls').innerHTML=touch?'Joystick pour bouger · bouton à droite pour agir':`<kbd>ZQSD</kbd> / <kbd>WASD</kbd> pour ${gm===0&&game!=='zombie'?'viser':'bouger'}<br><kbd>Espace</kbd> : ${(gm===0?conf.masterAction:conf.action).toLowerCase()}${gm===0&&game==='spin'?' · <kbd>F</kbd> : inverser':''}${humans===2?'<br>J2 : <kbd>Flèches</kbd> + <kbd>Entrée</kbd>':''}`;
  if(game==='pool')$('intro-controls').innerHTML=poolControls(gm,touch);
+ if(game==='kick')$('intro-controls').innerHTML=kickControls(gm,touch);
  if(game==='spin')$('intro-controls').innerHTML=spinControls(gm,touch);
  if(humans===2){const p=document.createElement('div');p.textContent=gm===1?'Joueur 2 : tu es le Game Master. '+conf.master:'Joueur 2 : '+conf.runner;p.className='second-role';$('intro-controls').append(p);}
  lastSurvivors='';refreshHud();}
@@ -41,16 +47,22 @@ function refreshHud(){if(!match)return;const c=match.config,p=match.players[0],g
  $('round-label').textContent=campaign?`MANCHE ${round+1} / 4`:'PARTIE RAPIDE';$('game-title').textContent=c.name;$('timer').textContent=String(Math.max(0,Math.ceil(c.duration-match.time))).padStart(2,'0');$('timer').classList.toggle('urgent',c.duration-match.time<10);$('remaining').textContent=`${remaining} ${remaining===1?'survivant':'survivants'} / 7`;
  $('role').textContent=match.game==='zombie'?p.infected?'☣ TU ES UN ZOMBIE':'☀ SURVIS AU MANOIR':gm?'★ GAME MASTER':p.alive?'★ RESTE DANS LA PARTIE':'ÉLIMINÉ · REGARDE LA SUITE';$('role').classList.toggle('master',gm||p.infected);
  const states=match.players.map(p=>[p.alive,p.infected].join(',')).join(';');if(states!==lastSurvivors){lastSurvivors=states;$('survivors').innerHTML=match.players.filter(p=>p.id!==match.master).map(p=>`<span class="survivor ${!p.alive||p.infected?'out':''}" style="--color:${p.color}" title="${escapeHtml(p.name)}${p.infected?' · zombie':!p.alive?' · éliminé':''}">${escapeHtml(p.name[0])}</span>`).join('');}
- $('action-button').hidden=(match.game==='spin'&&!gm)||(match.game==='pool'&&gm);
- $('joystick').hidden=!p.alive||(gm&&['pool','spin'].includes(match.game));
- $('joystick').querySelector('span').textContent=gm&&match.game==='kick'?'VISER':'DÉPLACER';
- $('joystick').setAttribute('aria-label',gm&&match.game==='kick'?'Joystick de visée':'Joystick de déplacement');
+ document.body.dataset.game=match.game;
+ $('kick-controls').hidden=!(match.game==='kick'&&match.master<humans);
+ const kickBusy=match.players[match.master].cooldown;
+ document.querySelectorAll('[data-kick]').forEach(b=>b.disabled=screen!=='playing'||kickBusy>0);
+ $('kick-status').textContent=kickBusy>0?'Tour en cours · '+kickBusy.toFixed(1)+' s':'Choisis ton attaque';
+ $('action-button').hidden=(match.game==='kick'&&(gm||!p.alive))||(match.game==='spin'&&!gm)||(match.game==='pool'&&gm);
+ $('joystick').hidden=match.game==='kick'||!p.alive||(gm&&['pool','spin'].includes(match.game));
+ $('joystick').querySelector('span').textContent='DÉPLACER';
+ $('joystick').setAttribute('aria-label','Joystick de déplacement');
  const poolMaster=match.game==='pool'&&match.master<humans,gmCooldown=match.players[match.master].cooldown;
  $('sling-control').hidden=!poolMaster;$('sling').disabled=gmCooldown>0||screen!=='playing';
  $('sling-status').textContent=gmCooldown>0?`Recharge · ${gmCooldown.toFixed(1)} s`:'Tire vers le bas, puis relâche';
  const action=gm?c.masterAction:c.action;$('action-label').textContent=action.toUpperCase();$('action-icon').textContent=match.game==='zombie'?'ϟ':gm?match.game==='spin'?'↻':'◎':'↑';const needsReverse=gm&&match.game==='spin'&&match.boostNeedsReverse;$('action-button').classList.toggle('charging',p.cooldown>0||needsReverse);$('action-button').setAttribute('aria-disabled',String(needsReverse||p.cooldown>0));$('cooldown-label').textContent=p.cooldown>.1?`${p.cooldown.toFixed(1)} s`:needsReverse?'INVERSE D’ABORD':touchInput()?'PRÊT':'ESPACE';$('reverse').hidden=!(gm&&match.game==='spin');$('split-labels').hidden=!(humans===2&&match.game==='zombie');
  const touch=touchInput();$('game-help').innerHTML=touch?`${gm?c.master:c.runner}`:humans===2?'J1 <kbd>ZQSD</kbd> <kbd>Espace</kbd> · J2 <kbd>↑ ← ↓ →</kbd> <kbd>Entrée</kbd>':`<kbd>ZQSD</kbd> / <kbd>WASD</kbd> ${gm&&match.game!=='zombie'?'viser':'bouger'} · <kbd>Espace</kbd> ${action.toLowerCase()}${gm&&match.game==='spin'?' · <kbd>F</kbd> inverser':''}`;
  if(match.game==='pool')$('game-help').innerHTML=poolControls(match.master,touch);
+ if(match.game==='kick')$('game-help').innerHTML=kickControls(match.master,touch);
  if(match.game==='spin')$('game-help').innerHTML=spinControls(match.master,touch);
 }
 function pause(){if(!['playing','countdown'].includes(screen))return;pausedFrom=screen;clearInputs();setScreen('paused');$('pause-dialog').showModal();}
@@ -68,6 +80,7 @@ function events(){for(const e of match.events){const p=match.players[e.id];if(e.
 function getInputs(){
  const input=readKeyboardInputs(keys,controls?.state,match);
  if(pendingPoolShot&&match?.game==='pool'&&match.master<humans){input[match.master].shot=pendingPoolShot;pendingPoolShot=null;}
+ if(pendingKick&&match?.game==='kick'&&match.master<humans){input[match.master].kick=pendingKick;pendingKick=null;}
  return input;
 }
 function loop(now){requestAnimationFrame(loop);const dt=Math.min(.08,Math.max(0,(now-(last||now))/1000));last=now;if(toastUntil&&now>toastUntil){$('toast').classList.remove('visible');toastUntil=0;}if(eventUntil&&now>eventUntil){$('event-toast').classList.remove('visible');eventUntil=0;}
@@ -100,6 +113,7 @@ function wire(){
  $('dance-list').addEventListener('click',e=>{const b=e.target.closest('[data-dance]');if(!b)return;const i=Number(b.dataset.dance),cost=[0,60,100][i];if(!prefs.dances.includes(i)){if(prefs.coins<cost)return;prefs.coins-=cost;prefs.dances.push(i);}prefs.dance=i;save();$('shop-dialog').close();$('coins').textContent=prefs.coins;danceUntil=performance.now()+7000;toast(['Le petit groove !','Place à la toupie !','Mode robot activé !'][i]);});
  $('photo').onclick=()=>{world.update(null,roster,performance.now()/1000,{lobby:true,dance:prefs.dance+1});const a=document.createElement('a');a.href=world.photo();a.download='bitemoji-party-photo.png';a.click();$('flash').classList.remove('flash');void $('flash').offsetWidth;$('flash').classList.add('flash');sound(1600,.05);toast('Photo de la party téléchargée !');};
  const dance=()=>{if(screen==='lobby')danceUntil=performance.now()+5000;else if(match&&screen==='playing')match.players[0].emote=2;};$('emote').onclick=dance;
+ document.querySelectorAll('[data-kick]').forEach(b=>b.onclick=()=>{if(screen==='playing'&&match?.game==='kick'&&match.master<humans&&match.players[match.master].cooldown<=0)pendingKick=b.dataset.kick;});
  $('reverse').onclick=()=>{if(match?.master===0&&match.game==='spin'&&screen==='playing'){match.reverseSpin();}};
  document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>$(b.dataset.close).close());
  $('intro-dialog').addEventListener('cancel',e=>{e.preventDefault();campaign=false;round=0;lobby();});$('pause-dialog').addEventListener('cancel',e=>{e.preventDefault();resume();});$('results-dialog').addEventListener('cancel',e=>{e.preventDefault();campaign=false;round=0;lobby();});

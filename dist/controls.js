@@ -3,7 +3,11 @@ export function readKeyboardInputs(keys,{virtual={x:0,z:0},actionHeld=false,poin
  const left=keys.has('KeyA')||keys.has('KeyQ'),right=keys.has('KeyD'),up=keys.has('KeyW')||keys.has('KeyZ'),down=keys.has('KeyS');
  const x=Number(right)-Number(left),z=Number(down)-Number(up);
  const input={0:{x:left||right?x:virtual.x,z:up||down?z:virtual.z,action:keys.has('Space')||actionHeld,reverse:keys.has('KeyF')},1:{x:Number(keys.has('ArrowRight'))-Number(keys.has('ArrowLeft')),z:Number(keys.has('ArrowDown'))-Number(keys.has('ArrowUp')),action:keys.has('Enter'),reverse:keys.has('ShiftRight')}};
- if(pointerAim&&!left&&!right&&!up&&!down&&match?.master===0&&match.game==='kick'&&!virtual.x&&!virtual.z)input[0].aim=pointerAim;
+ if(match?.game==='kick'){
+  for(const id of [0,1]){input[id].x=0;input[id].z=0;}
+  if(match.master===0)input[0].kick=keys.has('Digit1')?'low':keys.has('Digit2')?'high':keys.has('Digit3')?'slow':null;
+  if(match.master===1)input[1].kick=keys.has('ArrowDown')?'low':keys.has('ArrowUp')?'high':keys.has('ArrowRight')?'slow':null;
+ }
  return input;
 }
 // Pointer ownership is per control: a second finger never releases another action.
@@ -32,7 +36,7 @@ export function bindPointerControls({canvas,joystick,stick,action,sling,ball,ela
   state.virtual={x:x/max,z:z/max};stick.style.transform=`translate(${x}px,${z}px)`;
  };
  joystick.addEventListener('pointerdown',e=>{
-  const s=getState();if(!primary(e)||!playable()||(s.master===0&&['pool','spin'].includes(s.game)))return;
+  const s=getState();if(!primary(e)||!playable()||s.game==='kick'||(s.master===0&&['pool','spin'].includes(s.game)))return;
   e.preventDefault();if(capture(joystick,e))moveStick(e);
  });
  joystick.addEventListener('pointermove',moveStick);
@@ -40,7 +44,8 @@ export function bindPointerControls({canvas,joystick,stick,action,sling,ball,ela
  for(const element of [action,canvas]){
   element.addEventListener('pointerdown',e=>{
    const s=getState();if(!primary(e)||!playable())return;
-   if(element===canvas&&(e.pointerType!=='mouse'||s.game!=='kick'||s.master!==0))return;
+   if(element===canvas)return;
+   if(element===action&&s.game==='kick'&&s.master===0)return;
    if(element===action&&s.master===0&&s.game==='pool')return;
    if(element===action&&s.master!==0&&s.game==='spin')return;
    // One held action at a time, including mouse canvas vs action button.
@@ -49,7 +54,6 @@ export function bindPointerControls({canvas,joystick,stick,action,sling,ball,ela
   });
   for(const type of ['pointerup','pointercancel','lostpointercapture'])element.addEventListener(type,e=>{if(owners.get(element)===e.pointerId)stopAction(element);});
  }
- canvas.addEventListener('pointermove',e=>{const s=getState();if(e.pointerType==='mouse'&&s.playing&&s.game==='kick'&&s.master===0)state.pointerAim=aimAt(e.clientX,e.clientY);});
  const moveSling=e=>{
   if(owners.get(sling)!==e.pointerId||!drag)return;
   const clamp=n=>Math.max(-1,Math.min(1,n));
